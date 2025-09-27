@@ -1,0 +1,17 @@
+[build]
+  command = "npm install && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20.19.0"
+
+# Prevenção de acesso a arquivos sensíveis
+[[redirects]]
+  from = "/.env*"
+  to = "/404.html"
+  status = 404
+
+[[redirects]]
+  from = "/config/*"
+  to = "/404.html"
+  status = 404

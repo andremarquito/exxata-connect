@@ -1,0 +1,214 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: #eeeeee;
+  --foreground: #09182b;
+  --card: #ffffff;
+  --card-foreground: #09182b;
+  --popover: #ffffff;
+  --popover-foreground: #09182b;
+  /* Exxata Primary - Azul Marinho */
+  --primary: #09182b;
+  --primary-foreground: #eeeeee;
+  /* Exxata Secondary - Cinza Claro */
+  --secondary: #eeeeee;
+  --secondary-foreground: #09182b;
+  --muted: #b2b2bb;
+  --muted-foreground: #09182b;
+  /* Exxata Accent - Vermelho/Laranja */
+  --accent: #d51d07;
+  --accent-foreground: #eeeeee;
+  --destructive: #aa0e0e;
+  --border: #b2b2bb;
+  --input: #b2b2bb;
+  --ring: #1616d6;
+  --chart-1: #d51d07;
+  --chart-2: #09182b;
+  --chart-3: #1616d6;
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: #eeeeee;
+  --sidebar-foreground: #09182b;
+  --sidebar-primary: #09182b;
+  --sidebar-primary-foreground: #eeeeee;
+  --sidebar-accent: #eeeeee;
+  --sidebar-accent-foreground: #09182b;
+  --sidebar-border: #b2b2bb;
+  --sidebar-ring: #1616d6;
+
+  /* Custom Exxata Colors */
+  --color-blue-exxata: #09182b;
+  --color-exxata-red: #d51d07;
+  --color-dark-red: #aa0e0e;
+  --color-blue-corp: #1616d6;
+  --color-grey-sky: #b2b2bb;
+  --color-off-white: #eeeeee;
+}
+
+.dark {
+  --background: #09182b;
+  --foreground: #eeeeee;
+  --card: #09182b;
+  --card-foreground: #eeeeee;
+  --popover: #09182b;
+  --popover-foreground: #eeeeee;
+  --primary: #d51d07;
+  --primary-foreground: #eeeeee;
+  --secondary: #b2b2bb;
+  --secondary-foreground: #09182b;
+  --muted: #b2b2bb;
+  --muted-foreground: #eeeeee;
+  --accent: #d51d07;
+  --accent-foreground: #eeeeee;
+  --destructive: #aa0e0e;
+  --border: #b2b2bb;
+  --input: #b2b2bb;
+  --ring: #1616d6;
+  --chart-1: #d51d07;
+  --chart-2: #09182b;
+  --chart-3: #1616d6;
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: #09182b;
+  --sidebar-foreground: #eeeeee;
+  --sidebar-primary: #d51d07;
+  --sidebar-primary-foreground: #eeeeee;
+  --sidebar-accent: #b2b2bb;
+  --sidebar-accent-foreground: #eeeeee;
+  --sidebar-border: #b2b2bb;
+  --sidebar-ring: #1616d6;
+
+  /* Custom Exxata Colors for Dark Mode */
+  --color-blue-exxata: #09182b;
+  --color-exxata-red: #d51d07;
+  --color-dark-red: #aa0e0e;
+  --color-blue-corp: #1616d6;
+  --color-grey-sky: #b2b2bb;
+  --color-off-white: #eeeeee;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Exxata Custom Styles */
+.exxata-hero {
+  background-color: var(--color-blue-exxata);
+}
+
+.exxata-accent {
+  background-color: var(--color-exxata-red);
+}
+
+.exxata-text-accent {
+  color: var(--color-exxata-red);
+}
+
+.exxata-border-accent {
+  border-color: var(--color-exxata-red);
+}
+
+.exxata-hover-accent:hover {
+  background-color: var(--color-dark-red);
+}
+
+.bg-blue-exxata {
+  background-color: var(--color-blue-exxata);
+}
+
+.text-blue-exxata {
+  color: var(--color-blue-exxata);
+}
+
+.bg-exxata-red {
+  background-color: var(--color-exxata-red);
+}
+
+.text-exxata-red {
+  color: var(--color-exxata-red);
+}
+
+.bg-dark-red {
+  background-color: var(--color-dark-red);
+}
+
+.text-dark-red {
+  color: var(--color-dark-red);
+}
+
+.bg-blue-corp {
+  background-color: var(--color-blue-corp);
+}
+
+.text-blue-corp {
+  color: var(--color-blue-corp);
+}
+
+.bg-grey-sky {
+  background-color: var(--color-grey-sky);
+}
+
+.text-grey-sky {
+  color: var(--color-grey-sky);
+}
+
+.bg-off-white {
+  background-color: var(--color-off-white);
+}
+
+.text-off-white {
+  color: var(--color-off-white);
+}
+
+.font-manrope {
+  font-family: "Manrope", sans-serif;
+}
+

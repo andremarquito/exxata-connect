@@ -1,0 +1,14 @@
+# COPIE ESTE CONTEÚDO PARA .env.local
+# =====================================
+
+VITE_SUPABASE_URL=https://lrnpdyqcxstghzrujywf.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxybmRkeWNjc3RnaHpydWp5d2YiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTczNzExMzE2NywiZXhwIjoyMDUyNjg5MTY3fQ.IFn4LU7R8uVvIMLKpL-aRfYXQFxbqV3iGCG4Z5c_SjU
+VITE_APP_NAME=Exxata Connect
+VITE_APP_VERSION=1.0.0
+
+# PASSOS PARA DEPLOY MANUAL:
+# 1. Crie arquivo .env.local com este conteúdo
+# 2. npm install (se necessário)
+# 3. npm run build
+# 4. Copie _redirects para dist/
+# 5. Upload da pasta dist/ no Netlify
