@@ -31,6 +31,8 @@ export default defineConfig({
   },
   // Evita que o cache otimizado fique dentro do Dropbox (possíveis locks)
   cacheDir: path.resolve(os.tmpdir(), 'vite-cache-connect'),
+  // Configuração para evitar problemas com Dropbox
+  envDir: '.',
   // Build otimizado especificamente para Netlify
   build: {
     target: 'es2020',

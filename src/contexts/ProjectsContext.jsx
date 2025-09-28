@@ -103,82 +103,123 @@ const seedProjects = [
 // Funções para integração com Supabase
 const loadProjectsFromSupabase = async (userId) => {
   try {
+    console.log('🔄 Tentando carregar projetos do Supabase para usuário:', userId);
+    
+    // Carregar projetos com relacionamentos corretos baseados no schema real
     const { data, error } = await supabase
       .from('projects')
       .select(`
         *,
-        project_activities(*),
-        project_files(*),
-        project_indicators(*)
+        project_activities(
+          id,
+          custom_id,
+          name,
+          responsible,
+          start_date,
+          end_date,
+          status,
+          created_at,
+          updated_at
+        ),
+        project_files(
+          id,
+          name,
+          file_path,
+          file_size,
+          mime_type,
+          uploaded_by,
+          created_at
+        ),
+        project_indicators(
+          id,
+          name,
+          value,
+          type,
+          created_at,
+          updated_at
+        )
       `)
-      .or(`created_by.eq.${userId},team.cs."[{\"id\":\"${userId}\"}]"`);
+      .eq('created_by', userId);
 
     if (error) {
       console.error('Erro ao carregar projetos do Supabase:', error);
+      // Se a tabela não existir, retornar null para usar fallback
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+        console.log('📝 Tabela projects não existe no Supabase, usando dados locais');
+        return null;
+      }
       return null;
     }
 
-    // Converter dados do Supabase para formato local
+    console.log('✅ Projetos encontrados no Supabase:', data?.length || 0);
+
+    // Se não há dados, usar fallback
+    if (!data || data.length === 0) {
+      console.log('📝 Nenhum projeto encontrado no Supabase, usando dados locais');
+      return null;
+    }
+
+    // Converter dados do Supabase para formato local (baseado no schema real)
     return data.map(project => ({
       id: project.id,
-      name: project.name,
-      client: project.client,
-      status: project.status,
-      progress: project.progress,
-      contractValue: project.contract_value,
-      location: project.location,
-      phase: project.phase,
-      startDate: project.start_date,
-      endDate: project.end_date,
-      description: project.description,
-      hourlyRate: project.hourly_rate,
-      disputedAmount: project.disputed_amount,
-      contractSummary: project.contract_summary,
-      billingProgress: project.billing_progress,
-      sector: project.sector,
-      exxataActivities: project.exxata_activities || [],
+      name: project.name || 'Projeto sem nome',
+      client: project.client || 'Cliente não informado',
+      status: project.status || 'Planejamento',
+      progress: 0, // Campo não existe no schema, usar padrão
+      contractValue: project.contract_value || 'R$ 0,00',
+      location: project.location || '',
+      phase: 'Contratual', // Campo não existe no schema, usar padrão
+      startDate: '', // Campo não existe no schema
+      endDate: '', // Campo não existe no schema
+      description: project.description || '',
+      hourlyRate: '0', // Campo não existe no schema
+      disputedAmount: '0', // Campo não existe no schema
+      contractSummary: '', // Campo não existe no schema
+      billingProgress: 0, // Campo não existe no schema
+      sector: '', // Campo não existe no schema
+      exxataActivities: [], // Campo não existe no schema
       createdBy: project.created_by,
-      team: project.team || [],
-      aiPredictiveText: project.ai_predictive_text,
-      conducts: project.conducts || [],
-      panorama: project.panorama || {
+      team: Array.isArray(project.team) ? project.team : [],
+      aiPredictiveText: '', // Campo não existe no schema
+      conducts: [], // Será carregado separadamente se necessário
+      panorama: {
         tecnica: { status: 'green', items: [] },
         fisica: { status: 'green', items: [] },
         economica: { status: 'green', items: [] },
       },
-      overviewConfig: project.overview_config || { widgets: [], layouts: {} },
+      overviewConfig: { widgets: [], layouts: {} },
       activities: (project.project_activities || []).map(act => ({
         id: act.id,
-        seq: act.seq,
-        title: act.title,
-        assignedTo: act.assigned_to,
+        seq: act.custom_id || act.id,
+        title: act.name,
+        assignedTo: act.responsible,
         status: act.status,
         startDate: act.start_date,
         endDate: act.end_date,
-        description: act.description,
-        createdBy: act.created_by,
+        description: '',
+        createdBy: project.created_by,
         createdAt: act.created_at,
       })),
       files: (project.project_files || []).map(file => ({
         id: file.id,
         name: file.name,
-        size: file.size,
-        type: file.type,
-        ext: file.ext,
-        source: file.source,
-        url: file.url,
+        size: file.file_size,
+        type: file.mime_type,
+        ext: file.name ? file.name.split('.').pop() : '',
+        source: 'supabase',
+        url: file.file_path,
         uploadedBy: file.uploaded_by,
-        author: file.author,
-        uploadedAt: file.uploaded_at,
+        author: file.uploaded_by,
+        uploadedAt: file.created_at,
       })),
       indicators: (project.project_indicators || []).map(ind => ({
         id: ind.id,
-        title: ind.title,
-        type: ind.type,
-        labels: ind.labels || [],
-        datasets: ind.datasets || [],
-        notes: ind.notes,
-        createdBy: ind.created_by,
+        title: ind.name,
+        type: ind.type || 'bar',
+        labels: [],
+        datasets: [],
+        notes: ind.value || '',
+        createdBy: project.created_by,
         createdAt: ind.created_at,
       })),
     }));
@@ -190,40 +231,35 @@ const loadProjectsFromSupabase = async (userId) => {
 
 const saveProjectToSupabase = async (project) => {
   try {
+    console.log('💾 Tentando salvar projeto no Supabase:', project.name);
+    
+    // Inserir apenas campos que existem no schema real
     const { data, error } = await supabase
       .from('projects')
       .insert({
         name: project.name,
         client: project.client,
-        status: project.status,
-        progress: project.progress,
-        contract_value: project.contractValue,
-        location: project.location,
-        phase: project.phase,
-        start_date: project.startDate,
-        end_date: project.endDate,
         description: project.description,
-        hourly_rate: project.hourlyRate,
-        disputed_amount: project.disputedAmount,
-        contract_summary: project.contractSummary,
-        billing_progress: project.billingProgress,
-        sector: project.sector,
-        exxata_activities: project.exxataActivities,
-        ai_predictive_text: project.aiPredictiveText,
-        conducts: project.conducts,
-        panorama: project.panorama,
-        overview_config: project.overviewConfig,
+        location: project.location,
+        contract_value: project.contractValue,
+        status: project.status,
         created_by: project.createdBy,
-        team: project.team,
+        team: project.team || [],
       })
       .select()
       .single();
 
     if (error) {
       console.error('Erro ao salvar projeto no Supabase:', error);
+      // Se a tabela não existir, retornar null para usar apenas localStorage
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+        console.log('📝 Tabela projects não existe, salvando apenas localmente');
+        return null;
+      }
       return null;
     }
 
+    console.log('✅ Projeto salvo no Supabase:', data.id);
     return data;
   } catch (error) {
     console.error('Erro ao salvar projeto:', error);
@@ -244,28 +280,37 @@ export function ProjectsProvider({ children }) {
       }
 
       try {
-        // Tentar carregar do Supabase primeiro
-        const supabaseProjects = await loadProjectsFromSupabase(user.id);
+        // Verificar se o user.id é um UUID válido (Supabase) ou ID local
+        const isSupabaseUser = user.supabaseUser && typeof user.id === 'string' && user.id.length > 10;
         
-        if (supabaseProjects && supabaseProjects.length > 0) {
-          setProjects(supabaseProjects);
-          console.log('Projetos carregados do Supabase:', supabaseProjects.length);
+        if (isSupabaseUser) {
+          console.log('🔄 Carregando projetos do Supabase para UUID:', user.id);
+          // Tentar carregar do Supabase primeiro
+          const supabaseProjects = await loadProjectsFromSupabase(user.id);
+          
+          if (supabaseProjects && supabaseProjects.length > 0) {
+            setProjects(supabaseProjects);
+            console.log('Projetos carregados do Supabase:', supabaseProjects.length);
+            return;
+          }
         } else {
-          // Fallback para localStorage
-          const raw = localStorage.getItem(STORAGE_KEY);
-          if (raw) {
-            try {
-              const data = JSON.parse(raw);
-              setProjects(data);
-              console.log('Projetos carregados do localStorage:', data.length);
-            } catch {
-              setProjects(seedProjects);
-              console.log('Usando projetos seed');
-            }
-          } else {
+          console.log('👤 Usuário local detectado, pulando Supabase');
+        }
+
+        // Fallback para localStorage
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          try {
+            const data = JSON.parse(raw);
+            setProjects(data);
+            console.log('Projetos carregados do localStorage:', data.length);
+          } catch {
             setProjects(seedProjects);
             console.log('Usando projetos seed');
           }
+        } else {
+          setProjects(seedProjects);
+          console.log('Usando projetos seed');
         }
       } catch (error) {
         console.error('Erro ao carregar projetos:', error);

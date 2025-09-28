@@ -6,6 +6,8 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ProjectsProvider, useProjects } from '@/contexts/ProjectsContext';
 import { UsersProvider } from '@/contexts/UsersContext';
 import { LoginForm } from '@/components/auth/LoginForm';
+import ForgotPassword from '@/pages/ForgotPassword';
+import ResetPassword from '@/pages/ResetPassword';
 import DashboardNew from '@/pages/DashboardNew';
 import Projects from '@/pages/Projects';
 import ProjectDetails from '@/pages/ProjectDetails';
@@ -58,6 +60,8 @@ const AppContent = () => {
     return (
       <Routes>
         <Route path="/login" element={<LoginForm />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -129,6 +133,8 @@ const App = () => {
           <Router>
             <Routes>
               <Route path="/login" element={<LoginForm />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route
                 path="/*"
                 element={

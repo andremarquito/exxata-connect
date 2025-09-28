@@ -10,7 +10,10 @@ const withTimeout = (promise, ms = 12000) => {
     new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Auth operation timeout')), ms)
     )
-  ]);
+  ]).catch(error => {
+    // Garantir que sempre temos uma mensagem de erro
+    throw new Error(error?.message || error?.toString() || 'Timeout na operação de autenticação');
+  });
 };
 
 // Função para definir permissões baseadas no role
@@ -57,36 +60,60 @@ const getPermissionsByRole = (role) => {
 // Função para buscar perfil do usuário
 const getUserProfile = async (supabaseUser) => {
   try {
-    // Buscar dados adicionais do usuário na tabela profiles (se existir) com timeout
-    const { data: profile, error } = await withTimeout(
-      supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', supabaseUser.id)
-        .single(),
-      5000 // 5 segundos de timeout
-    );
+    console.log('🔍 Buscando perfil para usuário:', supabaseUser.email);
+    
+    let profile = null;
+    
+    // Tentar buscar dados adicionais do usuário na tabela profiles (se existir)
+    try {
+      const { data, error } = await withTimeout(
+        supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', supabaseUser.id)
+          .single(),
+        5000 // 5 segundos de timeout
+      );
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 = tabela não encontrada
-      console.error('Erro ao buscar perfil:', error);
+      if (error) {
+        if (error.code === 'PGRST116') {
+          console.log('📝 Tabela profiles não existe, usando fallback');
+        } else if (error.code === 'PGRST118') {
+          console.log('📝 Perfil não encontrado na tabela profiles, usando fallback');
+        } else {
+          console.warn('⚠️ Erro ao buscar perfil:', error.message);
+        }
+      } else {
+        profile = data;
+        console.log('✅ Perfil encontrado no Supabase:', profile.role);
+      }
+    } catch (profileError) {
+      console.warn('⚠️ Erro na consulta de perfil:', profileError.message);
     }
 
     // Determinar role baseado no email ou perfil
     let role = 'cliente'; // padrão
     let name = supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Usuário';
 
-    if (profile) {
-      role = profile.role || role;
+    // Primeiro, verificar fallback baseado no email (mais confiável)
+    if (supabaseUser.email === 'admin@exxata.com') {
+      role = 'admin';
+      name = 'Admin';
+    } else if (supabaseUser.email === 'consultor@exxata.com') {
+      role = 'consultor';
+      name = 'Consultor';
+    } else if (supabaseUser.email === 'andre.marquito@exxata.com.br') {
+      role = 'admin'; // Definir role específico para este usuário
+      name = 'André Marquito';
+    }
+
+    // Se houver perfil no Supabase, pode sobrescrever
+    if (profile && profile.role) {
+      role = profile.role;
       name = profile.name || name;
+      console.log('📋 Role definido pelo perfil Supabase:', role);
     } else {
-      // Fallback baseado no email para usuários existentes
-      if (supabaseUser.email === 'admin@exxata.com') {
-        role = 'admin';
-        name = 'Admin';
-      } else if (supabaseUser.email === 'consultor@exxata.com') {
-        role = 'consultor';
-        name = 'Consultor';
-      }
+      console.log('📋 Role definido por fallback de email:', role);
     }
 
     return {
@@ -98,14 +125,30 @@ const getUserProfile = async (supabaseUser) => {
       supabaseUser // Manter referência ao usuário do Supabase
     };
   } catch (error) {
-    console.error('Erro ao processar perfil do usuário:', error);
+    console.error('❌ Erro crítico ao processar perfil do usuário:', error.message || error);
+    
+    // Fallback seguro baseado no email mesmo em caso de erro
+    let fallbackRole = 'cliente';
+    let fallbackName = 'Usuário';
+    
+    if (supabaseUser.email === 'admin@exxata.com') {
+      fallbackRole = 'admin';
+      fallbackName = 'Admin';
+    } else if (supabaseUser.email === 'consultor@exxata.com') {
+      fallbackRole = 'consultor';
+      fallbackName = 'Consultor';
+    } else if (supabaseUser.email === 'andre.marquito@exxata.com.br') {
+      fallbackRole = 'admin';
+      fallbackName = 'André Marquito';
+    }
+    
     // Retornar dados básicos em caso de erro
     return {
       id: supabaseUser.id,
-      name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Usuário',
+      name: supabaseUser.user_metadata?.full_name || fallbackName,
       email: supabaseUser.email,
-      role: 'cliente',
-      permissions: getPermissionsByRole('cliente'),
+      role: fallbackRole,
+      permissions: getPermissionsByRole(fallbackRole),
       supabaseUser
     };
   }
@@ -122,14 +165,24 @@ export const AuthProvider = ({ children }) => {
         console.log('🔍 Verificando autenticação...');
         
         // Verificar sessão do Supabase primeiro com timeout
-        const { data: { session }, error } = await withTimeout(
-          supabase.auth.getSession(),
-          5000 // 5 segundos de timeout
-        );
+        let session = null;
+        let sessionError = null;
         
-        if (error) {
-          console.error('Erro ao verificar sessão Supabase:', error);
-          throw error; // Forçar fallback
+        try {
+          const result = await withTimeout(
+            supabase.auth.getSession(),
+            5000 // 5 segundos de timeout
+          );
+          session = result.data?.session;
+          sessionError = result.error;
+        } catch (timeoutError) {
+          console.warn('⏰ Timeout ao verificar sessão Supabase:', timeoutError.message);
+          sessionError = timeoutError;
+        }
+        
+        if (sessionError) {
+          console.warn('⚠️ Erro ao verificar sessão Supabase:', sessionError.message || sessionError);
+          throw sessionError; // Forçar fallback
         }
 
         if (session?.user) {
@@ -138,9 +191,22 @@ export const AuthProvider = ({ children }) => {
           const supabaseUser = session.user;
           
           // Buscar dados adicionais do usuário (role, etc.)
-          const userData = await getUserProfile(supabaseUser);
-          setUser(userData);
-          console.log('✅ Profile carregado:', userData.name);
+          try {
+            const userData = await getUserProfile(supabaseUser);
+            setUser(userData);
+            console.log('✅ Profile carregado:', userData.name, 'Role:', userData.role);
+          } catch (profileError) {
+            console.error('❌ Erro ao carregar perfil, usando dados básicos:', profileError.message);
+            // Fallback com dados básicos do Supabase
+            setUser({
+              id: supabaseUser.id,
+              name: supabaseUser.email?.split('@')[0] || 'Usuário',
+              email: supabaseUser.email,
+              role: supabaseUser.email === 'andre.marquito@exxata.com.br' ? 'admin' : 'cliente',
+              permissions: getPermissionsByRole(supabaseUser.email === 'andre.marquito@exxata.com.br' ? 'admin' : 'cliente'),
+              supabaseUser
+            });
+          }
         } else {
           console.log('❌ Nenhuma sessão Supabase, usando sistema local');
           // Fallback para sistema local (compatibilidade)
@@ -160,23 +226,28 @@ export const AuthProvider = ({ children }) => {
           }
         }
       } catch (error) {
-        console.error('Erro ao verificar autenticação:', error);
+        console.error('Erro ao verificar autenticação:', error?.message || error || 'Erro desconhecido');
         
         // Fallback para sistema local em caso de timeout
         console.log('🔄 Fallback para sistema local devido a erro');
-        const token = localStorage.getItem('token');
-        if (token) {
-          const rawUser = localStorage.getItem('auth_user');
-          if (rawUser) {
-            try { 
-              const localUser = JSON.parse(rawUser);
-              setUser(localUser);
-              console.log('✅ Fallback: usuário local carregado');
-            } catch { 
-              localStorage.removeItem('auth_user');
-              localStorage.removeItem('token');
+        try {
+          const token = localStorage.getItem('token');
+          if (token) {
+            const rawUser = localStorage.getItem('auth_user');
+            if (rawUser) {
+              try { 
+                const localUser = JSON.parse(rawUser);
+                setUser(localUser);
+                console.log('✅ Fallback: usuário local carregado');
+              } catch (parseError) { 
+                console.warn('⚠️ Erro ao fazer parse do usuário local:', parseError.message);
+                localStorage.removeItem('auth_user');
+                localStorage.removeItem('token');
+              }
             }
           }
+        } catch (fallbackError) {
+          console.error('❌ Erro no fallback:', fallbackError.message);
         }
       } finally {
         setIsLoading(false);
@@ -188,12 +259,24 @@ export const AuthProvider = ({ children }) => {
     // Escutar mudanças de autenticação do Supabase
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email);
+        console.log('🔄 Auth state changed:', event, session?.user?.email);
         
         if (session?.user) {
+          // Evitar sobrescrever dados se o usuário já está logado com o mesmo email
+          if (user && user.email === session.user.email) {
+            console.log('👤 Usuário já logado, mantendo dados atuais');
+            return;
+          }
+          
           const userData = await getUserProfile(session.user);
+          console.log('👤 Definindo usuário via auth state change:', userData.role);
           setUser(userData);
+          
+          // Atualizar localStorage para manter consistência
+          localStorage.setItem('token', 'supabase-session');
+          localStorage.setItem('auth_user', JSON.stringify(userData));
         } else {
+          console.log('👤 Logout detectado, limpando dados');
           setUser(null);
           // Limpar dados locais quando logout do Supabase
           localStorage.removeItem('token');
@@ -208,6 +291,8 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
+      console.log('🔐 Tentando login para:', email);
+      
       // Tentar login com Supabase primeiro
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
         email,
@@ -215,15 +300,32 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (authError) {
-        console.log('Login Supabase falhou, tentando sistema local:', authError.message);
+        console.log('❌ Login Supabase falhou:', authError.message);
         
-        // Fallback para sistema local
-        return await loginLocal(email, password);
+        // Verificar se é erro de credenciais inválidas
+        if (authError.message?.includes('Invalid login credentials') || 
+            authError.message?.includes('Email not confirmed') ||
+            authError.message?.includes('Invalid email or password')) {
+          console.log('🔄 Tentando sistema local como fallback');
+          
+          // Tentar fallback para sistema local
+          try {
+            return await loginLocal(email, password);
+          } catch (localError) {
+            // Se o sistema local também falhar, usar a mensagem mais específica
+            console.log('❌ Sistema local também falhou:', localError.message);
+            throw localError; // Propagar o erro específico do sistema local
+          }
+        }
+        
+        // Para outros erros do Supabase, lançar erro específico
+        throw new Error('Erro de conexão com o servidor. Tente novamente.');
       }
 
       if (authData.user) {
         // Login Supabase bem-sucedido
         const userData = await getUserProfile(authData.user);
+        console.log('✅ Login Supabase bem-sucedido, role:', userData.role);
         setUser(userData);
         
         // Manter compatibilidade com sistema local
@@ -233,15 +335,17 @@ export const AuthProvider = ({ children }) => {
         return { success: true };
       }
 
-      throw new Error('Erro inesperado no login');
+      throw new Error('Erro inesperado no login. Tente novamente.');
     } catch (error) {
-      console.error('Erro no login:', error);
+      console.error('❌ Erro no login:', error.message);
       throw error;
     }
   };
 
   // Função de login local (fallback)
   const loginLocal = async (email, password) => {
+    console.log('🔐 Tentando login local para:', email);
+    
     // Verificar se o usuário existe na base de usuários convidados
     const usersData = localStorage.getItem('exxata_users');
     let invitedUsers = [];
@@ -312,12 +416,27 @@ export const AuthProvider = ({ children }) => {
     }
 
     if (!userData) {
+      console.log('❌ Login local falhou para:', email);
+      
       if (!invitedUser) {
+        // Verificar se é um dos emails padrão com senha errada
+        if (email === 'admin@exxata.com' || 
+            email === 'consultor@exxata.com' || 
+            email === 'consultant@exxata.com' ||
+            email === 'cliente@exxata.com' || 
+            email === 'client@exxata.com') {
+          console.log('❌ Email padrão encontrado, mas senha incorreta');
+          throw new Error('Senha incorreta. Verifique suas credenciais e tente novamente.');
+        }
+        console.log('❌ Email não encontrado no sistema');
         throw new Error('E-mail não cadastrado na plataforma. Entre em contato com o administrador para receber um convite.');
       } else {
-        throw new Error('Senha incorreta.');
+        console.log('❌ Usuário convidado encontrado, mas senha incorreta');
+        throw new Error('Senha incorreta. Verifique suas credenciais e tente novamente.');
       }
     }
+
+    console.log('✅ Login local bem-sucedido para:', email);
 
     localStorage.setItem('token', 'local-token');
     localStorage.setItem('auth_user', JSON.stringify(userData));
@@ -348,12 +467,56 @@ export const AuthProvider = ({ children }) => {
     return user.permissions.includes(permission);
   };
 
+  const resetPassword = async (email) => {
+    try {
+      console.log('🔄 Enviando email de reset para:', email);
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        console.error('❌ Erro ao enviar email de reset:', error.message);
+        throw error;
+      }
+
+      console.log('✅ Email de reset enviado com sucesso');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro no reset de senha:', error.message);
+      throw error;
+    }
+  };
+
+  const updatePassword = async (newPassword) => {
+    try {
+      console.log('🔄 Atualizando senha...');
+      
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        console.error('❌ Erro ao atualizar senha:', error.message);
+        throw error;
+      }
+
+      console.log('✅ Senha atualizada com sucesso');
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro ao atualizar senha:', error.message);
+      throw error;
+    }
+  };
+
   const value = {
     user,
     isLoading,
     login,
     logout,
-    hasPermission
+    hasPermission,
+    resetPassword,
+    updatePassword
   };
 
   return (

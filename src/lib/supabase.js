@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
+
 // Verificar se as variáveis de ambiente estão configuradas
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
@@ -12,71 +13,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
   )
 }
 
-// Criar cliente do Supabase com configurações robustas
+// Criar cliente do Supabase com configurações simplificadas
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Configurações de autenticação mais robustas
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false, // Desabilitar para evitar problemas
-    // Configurar redirecionamento após login
-    flowType: 'implicit', // Mudança de pkce para implicit
-    // Storage customizado mais robusto
-    storage: {
-      getItem: (key) => {
-        try {
-          if (typeof window !== 'undefined' && window.localStorage) {
-            return window.localStorage.getItem(key)
-          }
-        } catch (e) {
-          console.warn('Erro no getItem:', e)
-        }
-        return null
-      },
-      setItem: (key, value) => {
-        try {
-          if (typeof window !== 'undefined' && window.localStorage) {
-            window.localStorage.setItem(key, value)
-          }
-        } catch (e) {
-          console.warn('Erro no setItem:', e)
-        }
-      },
-      removeItem: (key) => {
-        try {
-          if (typeof window !== 'undefined' && window.localStorage) {
-            window.localStorage.removeItem(key)
-          }
-        } catch (e) {
-          console.warn('Erro no removeItem:', e)
-        }
-      }
-    }
-  },
-  // Configurações globais
-  global: {
-    headers: {
-      'X-Client-Info': `exxata-connect@${import.meta.env.VITE_APP_VERSION || '1.0.0'}`,
-      'X-Request-ID': `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    },
-    fetch: (url, options = {}) => {
-      // Timeout personalizado para evitar travamentos
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout
-      
-      return fetch(url, {
-        ...options,
-        signal: controller.signal
-      }).finally(() => {
-        clearTimeout(timeoutId)
-      })
-    }
-  },
-  // Configurações de realtime desabilitadas temporariamente
-  realtime: {
-    params: {
-      eventsPerSecond: 5 // Reduzido para menos carga
-    }
+    detectSessionInUrl: false
   }
 })
 
