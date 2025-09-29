@@ -4,6 +4,8 @@
 // =====================================================
 
 import { supabase } from '@/lib/supabase';
+import { loadTeam } from '@/services/profiles';
+import { inviteUser as inviteUserWithAdminRole } from '@/services/invite';
 
 // =====================================================
 // 1. SERVIÇOS DE USUÁRIOS/PROFILES
@@ -33,13 +35,14 @@ export const profileService = {
   // Listar todos os usuários (apenas admin/manager)
   async getAllProfiles() {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data || [];
+      const team = await loadTeam(supabase);
+      return (team || []).map((member) => ({
+        ...member,
+        status:
+          typeof member.statusLabel === 'string' && member.statusLabel.trim().length > 0
+            ? member.statusLabel
+            : member.status ?? 'Ativo',
+      }));
     } catch (error) {
       console.error('Erro ao listar profiles:', error);
       return [];
@@ -71,17 +74,34 @@ export const profileService = {
   async inviteUser(email, role, invitedBy) {
     try {
       // Primeiro, registrar o usuário via Auth
-      const { data: authData, error: authError } = await supabase.auth.admin.inviteUserByEmail(email, {
-        data: {
-          role: role,
-          invited_by: invitedBy,
-          invited_at: new Date().toISOString()
+      const normalizedEmail = String(email).trim();
+      const fullName = normalizedEmail
+        .split('@')[0]
+        .split(/[._-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+
+      const inviteResult = await inviteUserWithAdminRole(supabase, normalizedEmail, fullName || undefined);
+
+      const invitedUser = inviteResult?.user ?? null;
+
+      if (invitedUser) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({
+              role: role ?? null,
+              invited_by: invitedBy ?? null,
+              invited_at: new Date().toISOString(),
+            })
+            .eq('id', invitedUser.id);
+        } catch (innerError) {
+          console.warn('Não foi possível sincronizar dados adicionais do convite:', innerError);
         }
-      });
+      }
 
-      if (authError) throw authError;
-
-      return { success: true, user: authData.user };
+      return { success: true, user: invitedUser };
     } catch (error) {
       console.error('Erro ao convidar usuário:', error);
       throw error;
