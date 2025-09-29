@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { loadTeam } from '@/services/profiles';
 
 const STORAGE_KEY = 'exxata_users';
 
@@ -16,26 +17,12 @@ export function UsersProvider({ children }) {
     try {
       console.log('🔄 Carregando profiles do Supabase...');
       
-      const { data: profiles, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const profiles = await loadTeam(supabase);
 
-      console.log('🔍 Resposta do Supabase:', { 
-        error: error?.message, 
-        count: profiles?.length, 
-        rawData: profiles 
+      console.log('🔍 Resposta do Supabase:', {
+        count: profiles?.length,
+        rawData: profiles
       });
-
-      if (error) {
-        console.error('❌ Erro ao carregar profiles:', error.message);
-        // Se a tabela não existir, retornar null para usar fallback
-        if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
-          console.log('📝 Tabela profiles não existe no Supabase, usando dados locais');
-          return null;
-        }
-        return null;
-      }
 
       if (!profiles || profiles.length === 0) {
         console.log('📝 Nenhum profile encontrado no Supabase');
@@ -47,12 +34,15 @@ export function UsersProvider({ children }) {
       // Converter profiles do Supabase para formato local
       const mappedProfiles = profiles.map(profile => ({
         id: profile.id,
-        name: profile.name || profile.email?.split('@')[0] || 'Usuário', // Corrigido: usar 'name' não 'full_name'
+        name: profile.name || profile.email?.split('@')[0] || 'Usuário',
         email: profile.email,
         role: profile.role || 'collaborator',
-        status: profile.status || 'Ativo', // Usar status do Supabase se disponível
+        roleLabel: profile.roleLabel || profile.role,
+        status: profile.statusLabel || profile.status || 'Ativo',
+        statusLabel: profile.statusLabel || profile.status || 'Ativo',
+        statusCode: profile.status || profile.statusCode || null,
         lastActive: profile.last_active || profile.updated_at || profile.created_at || new Date().toISOString(),
-        supabaseProfile: true, // Flag para identificar
+        supabaseProfile: true,
         invitedAt: profile.invited_at || profile.created_at,
         invitedBy: profile.invited_by || 'Sistema'
       }));
