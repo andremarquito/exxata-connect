@@ -22,6 +22,7 @@ import IndicatorChart from '@/components/projects/IndicatorChart';
 import { readSpreadsheet, transformSheetToIndicator, downloadIndicatorTemplate } from '@/utils/excelImporter';
 import html2canvas from 'html2canvas';
 import { toast } from 'react-hot-toast';
+import { projectService } from '@/services/supabaseService';
 
 export function ProjectDetails() {
   const { projectId } = useParams();
@@ -607,30 +608,69 @@ export function ProjectDetails() {
     e.target.value = null;
   };
 
+  const normalizeMember = (member) => {
+    if (!member) return null;
+    const profile = member.profiles || member.profile;
+    const id = member.user_id || member.id || profile?.id;
+    if (!id) return null;
+    return {
+      ...member,
+      id,
+      user_id: member.user_id || id,
+      name: member.name || profile?.name || member.email || profile?.email || 'Usuário',
+      email: member.email || profile?.email || '',
+      role: member.role || profile?.role || 'member',
+    };
+  };
+
+  const getInitialMembers = (proj) => {
+    const base = Array.isArray(proj?.project_members) && proj.project_members.length > 0
+      ? proj.project_members
+      : Array.isArray(proj?.team)
+        ? proj.team
+        : [];
+    return base.map(normalizeMember).filter(Boolean);
+  };
+
   // Team: add existing registered user to this project
+  const [projectMembers, setProjectMembers] = useState(() => getInitialMembers(project));
   const [showAddMember, setShowAddMember] = useState(false);
   const [searchMember, setSearchMember] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
-  const projectTeamIds = new Set((project?.team || []).map(t => t.id));
+  useEffect(() => {
+    setProjectMembers(getInitialMembers(project));
+  }, [project]);
+  const projectMemberIds = new Set(projectMembers.map((t) => String(t.user_id || t.id)));
   const availableUsers = (users || [])
-    .filter(u => !projectTeamIds.has(u.id))
+    .filter(u => {
+      const uid = String(u.id ?? u.user_id ?? '').trim();
+      if (!uid) return false;
+      return !projectMemberIds.has(uid);
+    })
     .filter(u => {
       const q = searchMember.trim().toLowerCase();
       if (!q) return true;
       return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
     });
-  const handleConfirmAddMember = () => {
-    const uid = Number(selectedUserId);
+  const handleConfirmAddMember = async () => {
+    const uid = String(selectedUserId).trim();
     if (!uid) return;
-    const u = (users || []).find(x => x.id === uid);
-    if (!u) return;
-    const nextTeam = Array.isArray(project.team) ? [...project.team] : [];
-    if (nextTeam.some(m => m.id === uid)) { setShowAddMember(false); setSelectedUserId(''); setSearchMember(''); return; }
-    nextTeam.push({ id: u.id, name: u.name, email: u.email, role: u.role });
-    updateProject(project.id, { team: nextTeam });
-    setShowAddMember(false);
-    setSelectedUserId('');
-    setSearchMember('');
+    try {
+      const member = await projectService.addProjectMember(project.id, uid, 'member');
+      const normalized = normalizeMember(member);
+      if (normalized) {
+        setProjectMembers(prev => {
+          const exists = prev.some(m => String(m.user_id || m.id) === String(normalized.user_id || normalized.id));
+          if (exists) return prev;
+          return [...prev, normalized];
+        });
+      }
+      setShowAddMember(false);
+      setSelectedUserId('');
+      setSearchMember('');
+    } catch (e) {
+      console.error('Erro ao adicionar membro no projeto:', e);
+    }
   };
 
   const handleUploadDocument = () => {
@@ -1320,11 +1360,14 @@ export function ProjectDetails() {
                         <SelectValue placeholder={availableUsers.length ? 'Selecione um usuário' : 'Nenhum usuário disponível'} />
                       </SelectTrigger>
                       <SelectContent>
-                        {availableUsers.map((u) => (
-                          <SelectItem key={u.id} value={String(u.id)}>
-                            {u.name} <span className="text-slate-500">• {u.email}</span>
-                          </SelectItem>
-                        ))}
+                        {availableUsers.map((u) => {
+                          const uid = String(u.id ?? u.user_id ?? '');
+                          return (
+                            <SelectItem key={uid || u.email} value={uid}>
+                              {u.name} <span className="text-slate-500">• {u.email}</span>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1343,12 +1386,12 @@ export function ProjectDetails() {
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
-                {Array.isArray(project.team) && project.team.length > 0 ? project.team.map((member) => (
+                {projectMembers.length > 0 ? projectMembers.map((member) => (
                   <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center space-x-4">
                       <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
                         <span className="font-medium text-muted-foreground">
-                          {member.name.split(' ').map(n => n[0]).join('')}
+                          {(member.name || member.email || '?').split(' ').map(n => n?.[0] || '').join('') || '?'}
                         </span>
                       </div>
                       <div>
@@ -1431,7 +1474,7 @@ export function ProjectDetails() {
                     >
                       <SelectTrigger><SelectValue placeholder="Responsável" /></SelectTrigger>
                       <SelectContent>
-                        {project.team.map(t => (
+                        {projectMembers.map(t => (
                           <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>
                         ))}
                       </SelectContent>
@@ -1593,7 +1636,7 @@ export function ProjectDetails() {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {project.team.map(t => (
+                                  {projectMembers.map(t => (
                                     <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>
                                   ))}
                                 </SelectContent>
