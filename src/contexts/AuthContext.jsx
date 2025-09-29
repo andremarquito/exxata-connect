@@ -157,6 +157,7 @@ const getUserProfile = async (supabaseUser) => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionProtected, setSessionProtected] = useState(false);
 
   // Verificar autenticação ao carregar
   useEffect(() => {
@@ -509,6 +510,31 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const protectSession = async () => {
+    try {
+      setSessionProtected(true);
+      const { data: currentSession } = await supabase.auth.getSession();
+      return currentSession?.session;
+    } catch (error) {
+      console.error('Erro ao proteger sessão:', error);
+      return null;
+    }
+  };
+
+  const restoreSession = async (originalSession) => {
+    try {
+      if (originalSession && !sessionProtected) {
+        await supabase.auth.setSession({
+          access_token: originalSession.access_token,
+          refresh_token: originalSession.refresh_token
+        });
+      }
+      setSessionProtected(false);
+    } catch (error) {
+      console.error('Erro ao restaurar sessão:', error);
+    }
+  };
+
   const value = {
     user,
     isLoading,
@@ -516,7 +542,9 @@ export const AuthProvider = ({ children }) => {
     logout,
     hasPermission,
     resetPassword,
-    updatePassword
+    updatePassword,
+    protectSession,
+    restoreSession
   };
 
   return (

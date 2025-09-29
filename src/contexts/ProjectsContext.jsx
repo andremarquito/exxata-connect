@@ -105,41 +105,90 @@ const loadProjectsFromSupabase = async (userId) => {
   try {
     console.log('🔄 Tentando carregar projetos do Supabase para usuário:', userId);
     
-    // Carregar projetos com relacionamentos corretos baseados no schema real
-    const { data, error } = await supabase
-      .from('projects')
-      .select(`
-        *,
-        project_activities(
-          id,
-          custom_id,
-          name,
-          responsible,
-          start_date,
-          end_date,
-          status,
-          created_at,
-          updated_at
-        ),
-        project_files(
-          id,
-          name,
-          file_path,
-          file_size,
-          mime_type,
-          uploaded_by,
-          created_at
-        ),
-        project_indicators(
-          id,
-          name,
-          value,
-          type,
-          created_at,
-          updated_at
-        )
-      `)
-      .eq('created_by', userId);
+    // 🎯 USAR NOVA VIEW COMPLETA COM MAPEAMENTO DE TIPOS
+    let data, error;
+    
+    try {
+      // Tentar usar a view completa primeiro (requer supabase_mapping_layer.sql)
+      const viewResult = await supabase
+        .from('v_projects_complete')
+        .select('*')
+        .eq('created_by', userId);
+      
+      if (viewResult.error && viewResult.error.code === 'PGRST116') {
+        console.log('📝 View não existe, usando carregamento básico...');
+        throw new Error('View não disponível');
+      }
+      
+      data = viewResult.data;
+      error = viewResult.error;
+      console.log('✅ Usando view completa com membros integrados!');
+      
+    } catch (viewError) {
+      console.log('⚠️ Fallback para carregamento básico:', viewError.message);
+      
+      // Fallback: carregar projects básico COM membros usando estrutura correta
+      console.log('📝 Carregando projetos com membros usando estrutura real...');
+      
+      const basicResult = await supabase
+        .from('projects')
+        .select(`
+          *,
+          project_activities_old:project_activities_old(
+            id,
+            custom_id,
+            name,
+            responsible,
+            start_date,
+            end_date,
+            status,
+            created_at,
+            updated_at
+          ),
+          project_files(
+            id,
+            name,
+            file_path,
+            file_size,
+            mime_type,
+            uploaded_by,
+            created_at
+          ),
+          project_indicators(
+            id,
+            name,
+            value,
+            type,
+            created_at,
+            updated_at
+          )
+        `)
+        .eq('created_by', userId);
+        
+      // Carregar membros separadamente para cada projeto
+      if (basicResult.data) {
+        for (const project of basicResult.data) {
+          const membersResult = await supabase
+            .from('project_members')
+            .select(`
+              *,
+              profiles (
+                id,
+                name,
+                email,
+                role,
+                status
+              )
+            `)
+            .eq('project', project.id.toString());
+            
+          project.members = membersResult.data || [];
+        }
+      }
+        
+      data = basicResult.data;
+      error = basicResult.error;
+    }
 
     if (error) {
       console.error('Erro ao carregar projetos do Supabase:', error);
@@ -181,7 +230,28 @@ const loadProjectsFromSupabase = async (userId) => {
       createdBy: project.created_by,
       team: Array.isArray(project.team) ? project.team : [],
       aiPredictiveText: '', // Campo não existe no schema
-      conducts: [], // Será carregado separadamente se necessário
+      // ✅ MEMBROS AGORA CARREGAM VIA VIEW (se disponível)
+      members: data[0]?.members ? 
+        Array.isArray(project.members) ? project.members.map(member => ({
+          id: member.user_id,
+          name: member.name || member.email?.split('@')[0] || 'Usuário',
+          email: member.email,
+          role: member.profile_role || member.role || 'member', 
+          status: member.status || 'Ativo',
+          addedAt: member.added_at,
+          addedBy: member.added_by
+        })) : [] : [],
+        
+      // ✅ CONDUTAS AGORA CARREGAM VIA VIEW (se disponível) 
+      conducts: data[0]?.conducts ?
+        Array.isArray(project.conducts) ? project.conducts.map(conduct => ({
+          id: conduct.id,
+          content: conduct.content,
+          urgency: conduct.urgency || 'Normal',
+          order: conduct.display_order || 0,
+          createdAt: conduct.created_at,
+          createdBy: conduct.created_by
+        })) : [] : [],
       panorama: {
         tecnica: { status: 'green', items: [] },
         fisica: { status: 'green', items: [] },
@@ -610,6 +680,103 @@ export function ProjectsProvider({ children }) {
     return false;
   };
 
+  // ========================================
+  // 🔧 FUNÇÕES PARA MEMBROS DE PROJETO
+  // ========================================
+  
+  const addProjectMember = async (projectId, userId, role = 'member') => {
+    try {
+      console.log('👥 Adicionando membro ao projeto:', { projectId, userId, role });
+      
+      // Usar insert direto na tabela project_members (coluna 'project' é TEXT)
+      const { data, error } = await supabase
+        .from('project_members')
+        .insert({
+          project: projectId.toString(), // Converter para string, pois coluna é TEXT
+          user_id: userId,
+          role: role,
+          added_by: user?.id,
+          added_at: new Date().toISOString()
+        })
+        .select('*');
+
+      if (error) {
+        console.error('❌ Erro ao adicionar membro:', error);
+        throw new Error(`Erro ao adicionar membro: ${error.message}`);
+      }
+
+      console.log('✅ Membro adicionado com sucesso:', data);
+      
+      // Recarregar projetos para atualizar a UI
+      loadProjects();
+      
+      return { success: true, member: data[0] };
+    } catch (error) {
+      console.error('❌ Erro ao adicionar membro:', error);
+      throw error;
+    }
+  };
+
+  const removeProjectMember = async (projectId, userId) => {
+    try {
+      console.log('👥 Removendo membro do projeto:', { projectId, userId });
+      
+      // Usar delete direto na tabela project_members (coluna 'project' é TEXT)
+      const { error } = await supabase
+        .from('project_members')
+        .delete()
+        .eq('project', projectId.toString()) // Converter para string
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('❌ Erro ao remover membro:', error);
+        throw new Error(`Erro ao remover membro: ${error.message}`);
+      }
+
+      console.log('✅ Membro removido com sucesso');
+      
+      // Recarregar projetos para atualizar a UI
+      loadProjects();
+      
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro ao remover membro:', error);
+      throw error;
+    }
+  };
+
+  const getProjectMembers = async (projectId) => {
+    try {
+      console.log('👥 Buscando membros do projeto:', projectId);
+      
+      // Buscar membros diretamente da tabela com JOIN para profiles
+      const { data, error } = await supabase
+        .from('project_members')
+        .select(`
+          *,
+          profiles (
+            id,
+            name,
+            email,
+            role,
+            status
+          )
+        `)
+        .eq('project', projectId.toString()); // Converter para string
+
+      if (error) {
+        console.error('❌ Erro ao buscar membros:', error);
+        return [];
+      }
+
+      console.log('✅ Membros encontrados:', data?.length || 0);
+      return data || [];
+    } catch (error) {
+      console.error('❌ Erro ao buscar membros:', error);
+      return [];
+    }
+  };
+
   const value = useMemo(() => ({
     projects,
     isLoading,
@@ -630,6 +797,10 @@ export function ProjectsProvider({ children }) {
     reorderProjectIndicators,
     getProjectById,
     userCanSeeProject,
+    // 🆕 Funções para membros de projeto
+    addProjectMember,
+    removeProjectMember,
+    getProjectMembers,
   }), [projects, isLoading, user]);
 
   return (

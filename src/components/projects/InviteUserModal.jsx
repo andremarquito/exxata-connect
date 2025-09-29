@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { X, UserPlus, Mail } from 'lucide-react';
 import { useUsers } from '@/contexts/UsersContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 
@@ -20,6 +21,7 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
   const { addUser, getUserByEmail } = useUsers();
+  const { protectSession, restoreSession } = useAuth();
 
   // Filtrar roles baseado no papel do usuário atual
   const getAvailableRoles = () => {
@@ -51,51 +53,60 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
     }
 
     try {
-      // Verificar se o email já está cadastrado no Supabase
-      // Nota: Verificação via profiles table (mais seguro que admin API)
-      const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('email', email)
-        .single();
-      
-      if (existingProfile) {
-        toast.error('Este e-mail já está cadastrado na plataforma.');
-        return;
-      }
+      // Proteger a sessão atual antes de fazer qualquer operação
+      const originalSession = await protectSession();
+      console.log('🔒 Sessão protegida durante convite de usuário');
 
-      // Verificar também no sistema local (fallback)
-      const localUser = getUserByEmail(email);
-      if (localUser) {
-        toast.error('Este e-mail já está cadastrado na plataforma.');
-        return;
-      }
-
-      // Gerar nome baseado no email
-      const localPart = String(email).split('@')[0] || '';
-      const name = localPart
-        .split(/[._-]+/)
-        .filter(Boolean)
-        .map(s => s.charAt(0).toUpperCase() + s.slice(1))
-        .join(' ') || email;
-
-      // Usar signUp normal do Supabase (client-side seguro)
-      const temporaryPassword = 'exxata123'; // Senha padrão
-      
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password: temporaryPassword,
-        options: {
-          data: {
-            full_name: name,
-            role: role || 'collaborator',
-            invited_by: currentUserRole,
-            invited_at: new Date().toISOString()
-          }
+      try {
+        // Verificar se o email já está cadastrado no Supabase
+        // Nota: Verificação via profiles table (mais seguro que admin API)
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('email', email)
+          .single();
+        
+        if (existingProfile) {
+          toast.error('Este e-mail já está cadastrado na plataforma.');
+          return;
         }
-      });
 
-      if (authError) {
+        // Verificar também no sistema local (fallback)
+        const localUser = getUserByEmail(email);
+        if (localUser) {
+          toast.error('Este e-mail já está cadastrado na plataforma.');
+          return;
+        }
+
+        // Gerar nome baseado no email
+        const localPart = String(email).split('@')[0] || '';
+        const name = localPart
+          .split(/[._-]+/)
+          .filter(Boolean)
+          .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+          .join(' ') || email;
+
+        // Usar signUp do Supabase 
+        const temporaryPassword = 'exxata123'; // Senha padrão
+        
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+          email,
+          password: temporaryPassword,
+          options: {
+            data: {
+              full_name: name,
+              role: role || 'collaborator',
+              invited_by: currentUserRole,
+              invited_at: new Date().toISOString()
+            }
+          }
+        });
+
+        // CRÍTICO: Restaurar sessão original imediatamente
+        await restoreSession(originalSession);
+        console.log('✅ Sessão original restaurada após convite');
+
+        if (authError) {
         console.error('Erro ao criar usuário no Supabase:', authError);
         
         // Fallback para sistema local
@@ -116,12 +127,18 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
         toast.success(`Convite enviado para ${email}! O usuário receberá um e-mail de confirmação.`);
       }
 
-      // Enviar email de convite (funciona para ambos os casos)
-      await sendInviteEmail(email, name, role, temporaryPassword);
+        // Enviar email de convite (funciona para ambos os casos)
+        await sendInviteEmail(email, name, role, temporaryPassword);
 
-      setEmail('');
-      setRole('');
-      onClose();
+        setEmail('');
+        setRole('');
+        onClose();
+      } catch (innerErr) {
+        // Garantir que a sessão seja restaurada mesmo em caso de erro
+        await restoreSession(originalSession);
+        console.error('Erro interno ao criar usuário:', innerErr);
+        toast.error('Não foi possível enviar o convite. Tente novamente.');
+      }
     } catch (err) {
       console.error('Erro ao enviar convite:', err);
       toast.error('Não foi possível enviar o convite. Tente novamente.');

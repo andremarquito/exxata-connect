@@ -30,7 +30,7 @@ const roleLabel = (r) => roleLabelMap[r] || r;
 
 export function Team() {
   const { user } = useAuth();
-  const { users, addUser, updateUser, deleteUser } = useUsers();
+  const { users, isLoading, addUser, updateUser, deleteUser } = useUsers();
   const [searchTerm, setSearchTerm] = useState('');
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -225,8 +225,22 @@ export function Team() {
               Equipe
             </h2>
             <p className="text-gray-600 text-lg">
-              Gerencie os membros da equipe e suas permissões
+              {isAdmin ? 'Visualize e gerencie todos os usuários cadastrados no sistema' : 'Gerencie os membros da equipe e suas permissões'}
             </p>
+            <div className="flex items-center space-x-4 mt-3">
+              <div className="flex items-center space-x-2 text-sm text-gray-500">
+                <div className="w-3 h-3 rounded-full bg-blue-100"></div>
+                <span>Usuários do Supabase ({users?.filter(u => u.supabaseProfile).length || 0})</span>
+              </div>
+              <div className="flex items-center space-x-2 text-sm text-gray-500">
+                <div className="w-3 h-3 rounded-full bg-gray-300"></div>
+                <span>Usuários locais ({users?.filter(u => !u.supabaseProfile).length || 0})</span>
+              </div>
+              <div className="flex items-center space-x-2 text-sm text-gray-500">
+                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                <span>Total: {users?.length || 0} usuários</span>
+              </div>
+            </div>
           </div>
         <div className="flex gap-2">
           {canExportData && (
@@ -278,16 +292,48 @@ export function Team() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredMembers.map((member) => (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={canManageTeam ? 5 : 4} className="text-center py-8">
+                    <div className="flex items-center justify-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500"></div>
+                      <span className="text-muted-foreground">Carregando usuários...</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : filteredMembers.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={canManageTeam ? 5 : 4} className="text-center py-8">
+                    <div className="text-muted-foreground">
+                      {searchTerm ? 'Nenhum usuário encontrado com esse termo' : 'Nenhum usuário cadastrado'}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredMembers.map((member) => (
                 <TableRow key={member.id}>
                   <TableCell>
                     <div className="flex items-center space-x-3">
-                      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                        <User className="h-5 w-5 text-muted-foreground" />
+                      <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                        member.supabaseProfile ? 'bg-blue-100' : 'bg-muted'
+                      }`}>
+                        <User className={`h-5 w-5 ${
+                          member.supabaseProfile ? 'text-blue-600' : 'text-muted-foreground'
+                        }`} />
                       </div>
                       <div>
-                        <p className="font-medium">{member.name}</p>
+                        <div className="flex items-center space-x-2">
+                          <p className="font-medium">{member.name}</p>
+                          {member.supabaseProfile && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              Supabase
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-muted-foreground">{member.email}</p>
+                        {isAdmin && member.supabaseProfile && (
+                          <p className="text-xs text-blue-600">ID: {member.id}</p>
+                        )}
                       </div>
                     </div>
                   </TableCell>
@@ -339,7 +385,8 @@ export function Team() {
                     </TableCell>
                   )}
                 </TableRow>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
