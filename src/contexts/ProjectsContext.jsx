@@ -100,6 +100,45 @@ const seedProjects = [
   }
 ];
 
+const extractUserId = (member) => {
+  if (!member) return null;
+  if (typeof member === 'string' || typeof member === 'number') return member;
+  if (typeof member === 'object') {
+    if (member.value && typeof member.value === 'object') {
+      return member.value.user_id || member.value.id || member.value.value || null;
+    }
+    return member.user_id || member.id || member.value || member.userId || member.profile?.id || member.profiles?.id || null;
+  }
+  return null;
+};
+
+const resolveTeamUserIds = async (team) => {
+  if (!Array.isArray(team) || team.length === 0) return [];
+  const ids = team
+    .map(extractUserId)
+    .filter(Boolean)
+    .map(id => String(id));
+  return Array.from(new Set(ids));
+};
+
+const mapMemberRow = (row) => {
+  if (!row) return null;
+  const profile = row.profiles || row.profile || {};
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    userId: row.user_id,
+    role: row.role || 'member',
+    added_at: row.added_at,
+    added_by: row.added_by,
+    project_id: row.project_id,
+    profiles: profile && Object.keys(profile).length ? profile : null,
+    name: row.name || profile.name || '',
+    email: row.email || profile.email || '',
+    status: row.status || profile.status || '',
+  };
+};
+
 // Funções para integração com Supabase
 const loadProjectsFromSupabase = async (userId) => {
   try {
@@ -171,7 +210,7 @@ const loadProjectsFromSupabase = async (userId) => {
           const membersResult = await supabase
             .from('project_members')
             .select(`
-              *,
+              id, user_id, role, added_at, added_by, project_id,
               profiles (
                 id,
                 name,
@@ -180,8 +219,8 @@ const loadProjectsFromSupabase = async (userId) => {
                 status
               )
             `)
-            .eq('project', project.id.toString());
-            
+            .eq('project_id', project.id);
+
           project.members = membersResult.data || [];
         }
       }
@@ -302,9 +341,9 @@ const loadProjectsFromSupabase = async (userId) => {
 const saveProjectToSupabase = async (project) => {
   try {
     console.log('💾 Tentando salvar projeto no Supabase:', project.name);
-    
-    // Inserir apenas campos que existem no schema real
-    const { data, error } = await supabase
+
+    // 1) Criar projeto (sem 'team')
+    const { data: proj, error: errInsert } = await supabase
       .from('projects')
       .insert({
         name: project.name,
@@ -314,23 +353,44 @@ const saveProjectToSupabase = async (project) => {
         contract_value: project.contractValue,
         status: project.status,
         created_by: project.createdBy,
-        team: project.team || [],
       })
       .select()
       .single();
 
-    if (error) {
-      console.error('Erro ao salvar projeto no Supabase:', error);
-      // Se a tabela não existir, retornar null para usar apenas localStorage
-      if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
-        console.log('📝 Tabela projects não existe, salvando apenas localmente');
-        return null;
-      }
+    if (errInsert) {
+      console.error('Erro ao salvar projeto no Supabase:', errInsert);
+      if (errInsert.code === 'PGRST116' || errInsert.message?.includes('does not exist')) return null;
       return null;
     }
 
-    console.log('✅ Projeto salvo no Supabase:', data.id);
-    return data;
+    // 2) Resolver usuários do form e inserir em project_members
+    const userIds = await resolveTeamUserIds(project.team);
+    let members = [];
+    if (userIds.length) {
+      const rows = userIds.map(uid => ({
+        project_id: Number(proj.id),
+        user_id: uid,
+        role: 'member',
+        added_by: project.createdBy || null,
+      }));
+
+      const { data: pmRows, error: errPM } = await supabase
+        .from('project_members')
+        .insert(rows)
+        .select(`
+          id, user_id, role, added_at, added_by, project_id,
+          profiles ( id, name, email, role, status )
+        `);
+
+      if (errPM) {
+        console.error('Erro ao inserir membros do projeto:', errPM);
+      } else {
+        members = (pmRows || []).map(mapMemberRow).filter(Boolean);
+      }
+    }
+
+    console.log('✅ Projeto salvo no Supabase:', proj.id);
+    return { ...proj, members };
   } catch (error) {
     console.error('Erro ao salvar projeto:', error);
     return null;
@@ -449,6 +509,9 @@ export function ProjectsProvider({ children }) {
       if (savedProject) {
         // Usar ID do Supabase
         newProject.id = savedProject.id;
+        if (Array.isArray(savedProject.members)) {
+          newProject.project_members = savedProject.members;
+        }
         console.log('Projeto salvo no Supabase:', savedProject.id);
       } else {
         console.log('Projeto salvo apenas localmente');
@@ -687,14 +750,13 @@ export function ProjectsProvider({ children }) {
   const addProjectMember = async (projectId, userId, role = 'member') => {
     try {
       console.log('👥 Adicionando membro ao projeto:', { projectId, userId, role });
-      
-      // Usar insert direto na tabela project_members (coluna 'project' é TEXT)
+
       const { data, error } = await supabase
         .from('project_members')
         .insert({
-          project: projectId.toString(), // Converter para string, pois coluna é TEXT
+          project_id: Number(projectId),   // ✅ coluna e tipo corretos
           user_id: userId,
-          role: role,
+          role,
           added_by: user?.id,
           added_at: new Date().toISOString()
         })
@@ -706,10 +768,10 @@ export function ProjectsProvider({ children }) {
       }
 
       console.log('✅ Membro adicionado com sucesso:', data);
-      
+
       // Recarregar projetos para atualizar a UI
       loadProjects();
-      
+
       return { success: true, member: data[0] };
     } catch (error) {
       console.error('❌ Erro ao adicionar membro:', error);
@@ -720,12 +782,11 @@ export function ProjectsProvider({ children }) {
   const removeProjectMember = async (projectId, userId) => {
     try {
       console.log('👥 Removendo membro do projeto:', { projectId, userId });
-      
-      // Usar delete direto na tabela project_members (coluna 'project' é TEXT)
+
       const { error } = await supabase
         .from('project_members')
         .delete()
-        .eq('project', projectId.toString()) // Converter para string
+        .eq('project_id', Number(projectId))
         .eq('user_id', userId);
 
       if (error) {
@@ -762,7 +823,7 @@ export function ProjectsProvider({ children }) {
             status
           )
         `)
-        .eq('project', projectId.toString()); // Converter para string
+        .eq('project_id', Number(projectId));
 
       if (error) {
         console.error('❌ Erro ao buscar membros:', error);
