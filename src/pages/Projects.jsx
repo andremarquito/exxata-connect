@@ -211,13 +211,6 @@ export function Projects() {
                         <span>{project.location}</span>
                       </div>
                     </div>
-                    <div className="w-48">
-                      <div className="flex justify-between text-xs mb-1">
-                        <span>Progresso</span>
-                        <span>{project.progress}%</span>
-                      </div>
-                      <Progress value={project.progress} className="h-2" />
-                    </div>
                   </div>
                 </CardContent>
               </Card>

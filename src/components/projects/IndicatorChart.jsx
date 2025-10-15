@@ -16,7 +16,8 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 const IndicatorChart = ({ indicator }) => {
-  const { type, labels, datasets } = indicator;
+  const { chart_type, labels, datasets } = indicator;
+  const type = chart_type; // Mantém a variável 'type' para compatibilidade interna do componente
 
   const data = labels.map((label, index) => {
     const dataEntry = { name: label };

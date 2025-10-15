@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { conductService, activityService, fileService, indicatorService, panoramaService } from '@/services/supabaseService';
 
 const STORAGE_KEY = 'exxata_projects';
 
@@ -214,35 +215,35 @@ const loadProjectsFromSupabase = async (userId) => {
       name: project.name || 'Projeto sem nome',
       client: project.client || 'Cliente não informado',
       status: project.status || 'Planejamento',
-      progress: 0, // Campo não existe no schema, usar padrão
+      progress: project.progress || 0,
       contractValue: project.contract_value || 'R$ 0,00',
       location: project.location || '',
-      phase: 'Contratual', // Campo não existe no schema, usar padrão
-      startDate: '', // Campo não existe no schema
-      endDate: '', // Campo não existe no schema
+      phase: project.phase || 'Contratual',
+      startDate: project.start_date || '',
+      endDate: project.end_date || '',
       description: project.description || '',
-      hourlyRate: '0', // Campo não existe no schema
-      disputedAmount: '0', // Campo não existe no schema
-      contractSummary: '', // Campo não existe no schema
-      billingProgress: 0, // Campo não existe no schema
-      sector: '', // Campo não existe no schema
-      exxataActivities: [], // Campo não existe no schema
+      hourlyRate: project.hourly_rate || '0',
+      disputedAmount: project.disputed_amount || '0',
+      contractSummary: project.contract_summary || '',
+      billingProgress: project.billing_progress || 0,
+      sector: project.sector || '',
+      exxataActivities: Array.isArray(project.exxata_activities) ? project.exxata_activities : [],
       createdBy: project.created_by,
-      team: Array.isArray(project.team) ? project.team : [],
-      aiPredictiveText: '', // Campo não existe no schema
-      // ✅ MEMBROS AGORA CARREGAM VIA VIEW (se disponível)
-      members: data[0]?.members ? 
+      team: [], // Team vem da tabela project_members, será carregado separadamente
+      aiPredictiveText: project.ai_predictive_text || '',
+      //  MEMBROS AGORA CARREGAM VIA VIEW (se disponível)
+      members: data[0]?.members ?
         Array.isArray(project.members) ? project.members.map(member => ({
           id: member.user_id,
           name: member.name || member.email?.split('@')[0] || 'Usuário',
           email: member.email,
-          role: member.profile_role || member.role || 'member', 
+          role: member.profile_role || member.role || 'member',
           status: member.status || 'Ativo',
           addedAt: member.added_at,
           addedBy: member.added_by
         })) : [] : [],
         
-      // ✅ CONDUTAS AGORA CARREGAM VIA VIEW (se disponível) 
+      //  CONDUTAS AGORA CARREGAM VIA VIEW (se disponível)
       conducts: data[0]?.conducts ?
         Array.isArray(project.conducts) ? project.conducts.map(conduct => ({
           id: conduct.id,
@@ -257,7 +258,7 @@ const loadProjectsFromSupabase = async (userId) => {
         fisica: { status: 'green', items: [] },
         economica: { status: 'green', items: [] },
       },
-      overviewConfig: { widgets: [], layouts: {} },
+      overviewConfig: project.overview_cards || { widgets: [], layouts: {} },
       activities: (project.project_activities || []).map(act => ({
         id: act.id,
         seq: act.custom_id || act.id,
@@ -303,36 +304,42 @@ const saveProjectToSupabase = async (project) => {
   try {
     console.log('💾 Tentando salvar projeto no Supabase:', project.name);
     
-    // Inserir apenas campos que existem no schema real
-    const { data, error } = await supabase
-      .from('projects')
-      .insert({
-        name: project.name,
-        client: project.client,
-        description: project.description,
-        location: project.location,
-        contract_value: project.contractValue,
-        status: project.status,
-        created_by: project.createdBy,
-        team: project.team || [],
-      })
-      .select()
-      .single();
-
-    if (error) {
-      console.error('Erro ao salvar projeto no Supabase:', error);
-      // Se a tabela não existir, retornar null para usar apenas localStorage
-      if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
-        console.log('📝 Tabela projects não existe, salvando apenas localmente');
-        return null;
-      }
-      return null;
-    }
-
+    // Usar o projectService que já tem a lógica completa e atualizada
+    const { projectService } = await import('@/services/supabaseService');
+    
+    // Preparar dados do projeto no formato esperado pelo service
+    const projectData = {
+      name: project.name,
+      client: project.client,
+      description: project.description,
+      location: project.location,
+      contractValue: project.contractValue,
+      startDate: project.startDate,
+      endDate: project.endDate,
+      sector: project.sector,
+      phase: project.phase,
+      status: project.status,
+      hourlyRate: project.hourlyRate,
+      disputedAmount: project.disputedAmount,
+      contractSummary: project.contractSummary,
+      billingProgress: project.billingProgress,
+      exxataActivities: project.exxataActivities,
+      conducts: project.conducts,
+      panorama: project.panorama,
+      overviewCards: project.overviewConfig,
+      aiPredictiveText: project.aiPredictiveText
+    };
+    
+    const data = await projectService.createProject(projectData);
     console.log('✅ Projeto salvo no Supabase:', data.id);
     return data;
   } catch (error) {
-    console.error('Erro ao salvar projeto:', error);
+    console.error('Erro ao salvar projeto no Supabase:', error);
+    // Se a tabela não existir, retornar null para usar apenas localStorage
+    if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+      console.log('📝 Tabela projects não existe, salvando apenas localmente');
+      return null;
+    }
     return null;
   }
 };
@@ -342,65 +349,66 @@ export function ProjectsProvider({ children }) {
   const [projects, setProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const loadProjects = async () => {
-      if (!user?.id) {
-        setIsLoading(false);
-        return;
+  // Função para carregar projetos
+  const loadProjects = async () => {
+    if (!user?.id) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      // Verificar se o user.id é um UUID válido (Supabase) ou ID local
+      const isSupabaseUser = user.supabaseUser && typeof user.id === 'string' && user.id.length > 10;
+
+      if (isSupabaseUser) {
+        console.log('🔄 Carregando projetos do Supabase para UUID:', user.id);
+        // Tentar carregar do Supabase primeiro
+        const supabaseProjects = await loadProjectsFromSupabase(user.id);
+
+        if (supabaseProjects && supabaseProjects.length > 0) {
+          setProjects(supabaseProjects);
+          console.log('Projetos carregados do Supabase:', supabaseProjects.length);
+          return;
+        }
+      } else {
+        console.log('👤 Usuário local detectado, pulando Supabase');
       }
 
-      try {
-        // Verificar se o user.id é um UUID válido (Supabase) ou ID local
-        const isSupabaseUser = user.supabaseUser && typeof user.id === 'string' && user.id.length > 10;
-        
-        if (isSupabaseUser) {
-          console.log('🔄 Carregando projetos do Supabase para UUID:', user.id);
-          // Tentar carregar do Supabase primeiro
-          const supabaseProjects = await loadProjectsFromSupabase(user.id);
-          
-          if (supabaseProjects && supabaseProjects.length > 0) {
-            setProjects(supabaseProjects);
-            console.log('Projetos carregados do Supabase:', supabaseProjects.length);
-            return;
-          }
-        } else {
-          console.log('👤 Usuário local detectado, pulando Supabase');
-        }
-
-        // Fallback para localStorage
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          try {
-            const data = JSON.parse(raw);
-            setProjects(data);
-            console.log('Projetos carregados do localStorage:', data.length);
-          } catch {
-            setProjects(seedProjects);
-            console.log('Usando projetos seed');
-          }
-        } else {
+      // Fallback para localStorage
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        try {
+          const data = JSON.parse(raw);
+          setProjects(data);
+          console.log('Projetos carregados do localStorage:', data.length);
+        } catch {
           setProjects(seedProjects);
           console.log('Usando projetos seed');
         }
-      } catch (error) {
-        console.error('Erro ao carregar projetos:', error);
-        // Fallback para localStorage em caso de erro
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          try {
-            const data = JSON.parse(raw);
-            setProjects(data);
-          } catch {
-            setProjects(seedProjects);
-          }
-        } else {
+      } else {
+        setProjects(seedProjects);
+        console.log('Usando projetos seed');
+      }
+    } catch (error) {
+      console.error('Erro ao carregar projetos:', error);
+      // Fallback para localStorage em caso de erro
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        try {
+          const data = JSON.parse(raw);
+          setProjects(data);
+        } catch {
           setProjects(seedProjects);
         }
-      } finally {
-        setIsLoading(false);
+      } else {
+        setProjects(seedProjects);
       }
-    };
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadProjects();
   }, [user?.id]);
 
@@ -465,209 +473,695 @@ export function ProjectsProvider({ children }) {
     setProjects(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)));
   };
 
+  // Função para atualizar projeto no backend e estado local
+  const updateProjectBackend = async (id, patch) => {
+    try {
+      console.log('💾 Salvando projeto no Supabase:', { id, patch });
+
+      // Preparar dados para o Supabase
+      const supabaseData = {};
+
+      // Mapear campos do patch para os nomes corretos do Supabase
+      if (patch.overviewConfig !== undefined) {
+        supabaseData.overview_cards = patch.overviewConfig;
+      }
+
+      if (patch.contract_value !== undefined) {
+        supabaseData.contract_value = patch.contract_value;
+      }
+
+      if (patch.location !== undefined) {
+        supabaseData.location = patch.location;
+      }
+
+      if (patch.description !== undefined) {
+        supabaseData.description = patch.description;
+      }
+
+      if (patch.startDate !== undefined) {
+        supabaseData.start_date = patch.startDate;
+      }
+
+      if (patch.endDate !== undefined) {
+        supabaseData.end_date = patch.endDate;
+      }
+
+      if (patch.contractSummary !== undefined) {
+        supabaseData.contract_summary = patch.contractSummary;
+      }
+
+      if (patch.hourlyRate !== undefined) {
+        supabaseData.hourly_rate = patch.hourlyRate;
+      }
+
+      if (patch.disputedAmount !== undefined) {
+        supabaseData.disputed_amount = patch.disputedAmount;
+      }
+
+      if (patch.billing_progress !== undefined) {
+        supabaseData.billing_progress = patch.billing_progress;
+      }
+
+      if (patch.progress !== undefined) {
+        supabaseData.progress = patch.progress;
+      }
+
+      if (patch.status !== undefined) {
+        supabaseData.status = patch.status;
+      }
+
+      // Adicionar timestamp de atualização e usuário
+      supabaseData.updated_at = new Date().toISOString();
+      if (user?.id) {
+        supabaseData.updated_by = user.id;
+      }
+
+      // Salvar no Supabase
+      const { error } = await supabase
+        .from('projects')
+        .update(supabaseData)
+        .eq('id', id);
+
+      if (error) {
+        console.error('❌ Erro ao salvar projeto no Supabase:', error);
+        throw new Error(`Erro ao salvar projeto: ${error.message}`);
+      }
+
+      console.log('✅ Projeto salvo com sucesso no Supabase');
+
+      // Atualizar estado local
+      updateProject(id, patch);
+
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro ao atualizar projeto:', error);
+      throw error;
+    }
+  };
+
   const deleteProject = (id) => {
     setProjects(prev => prev.filter(p => p.id !== id));
   };
 
   const getProjectById = (id) => projects.find(p => p.id === Number(id));
 
-  // Activities helpers
-  const addProjectActivity = (projectId, payload) => {
-    let created = null;
-    setProjects(prev => prev.map(p => {
-      if (p.id !== Number(projectId)) return p;
-      const prevList = Array.isArray(p.activities) ? p.activities : [];
-      const maxSeq = prevList.reduce((m, x) => Math.max(m, Number(x.seq) || 0), 0);
-      created = {
-        id: Date.now() + Math.random(),
-        seq: maxSeq + 1,
+// Função helper para retry em caso de timeout de autenticação
+const withAuthRetry = async (operation, maxRetries = 1) => {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      console.error(`❌ Tentativa ${attempt + 1} falhou:`, error);
+
+      // Verificar se é erro de autenticação que pode ser resolvido com retry
+      if ((error.message?.includes('Auth operation timeout') ||
+           error.message?.includes('timeout') ||
+           error.code === 'PGRST301') && attempt < maxRetries) {
+
+        console.log('🔄 Tentando refresh da sessão e retry...');
+
+        try {
+          // Tentar refresh da sessão
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            console.log('✅ Sessão válida encontrada, aguardando e tentando novamente...');
+            // Aguardar um pouco antes do retry
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue; // Próxima tentativa
+          } else {
+            console.log('❌ Sessão expirada, não é possível fazer retry');
+            throw error;
+          }
+        } catch (sessionError) {
+          console.error('❌ Erro ao verificar sessão:', sessionError);
+          throw error;
+        }
+      } else {
+        // Não é um erro que pode ser resolvido com retry ou esgotou as tentativas
+        throw error;
+      }
+    }
+  }
+};
+  
+  const addProjectActivity = async (projectId, payload) => {
+    try {
+      console.log('📅 Adicionando atividade ao projeto:', { projectId, payload });
+      
+      const newActivity = await activityService.createActivity(projectId, {
+        customId: payload.customId,
         title: payload.title,
         assignedTo: payload.assignedTo,
-        status: payload.status || 'A Fazer',
         startDate: payload.startDate,
         endDate: payload.endDate,
-        createdAt: new Date().toISOString(),
-        createdBy: { id: user?.id ?? null, name: user?.name ?? 'Usuário', email: user?.email ?? '' },
-        description: payload.description || '',
+        status: payload.status || 'A Fazer'
+      });
+
+      console.log('✅ Atividade criada:', newActivity);
+      
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const activities = Array.isArray(p.activities) ? p.activities : [];
+        return {
+          ...p,
+          activities: [...activities, {
+            id: newActivity.id,
+            customId: newActivity.custom_id,
+            title: newActivity.name,
+            assignedTo: newActivity.responsible,
+            startDate: newActivity.start_date,
+            endDate: newActivity.end_date,
+            status: newActivity.status,
+            createdAt: newActivity.created_at
+          }]
+        };
+      }));
+      
+      return newActivity;
+    } catch (error) {
+      console.error('❌ Erro ao adicionar atividade:', error);
+      throw error;
+    }
+  };
+
+  const deleteProjectActivity = async (projectId, activityId) => {
+    try {
+      console.log('📅 Deletando atividade:', { projectId, activityId });
+
+      await activityService.deleteActivity(activityId);
+
+      console.log('✅ Atividade deletada com sucesso');
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const activities = Array.isArray(p.activities) ? p.activities : [];
+        return {
+          ...p,
+          activities: activities.filter(a => a.id !== activityId)
+        };
+      }));
+
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro ao deletar atividade:', error);
+      throw error;
+    }
+  };
+
+  const updateProjectActivity = async (projectId, activityId, patch) => {
+    return await withAuthRetry(async () => {
+      console.log('📅 Atualizando atividade:', { projectId, activityId, patch });
+
+      const updatedActivity = await activityService.updateActivity(activityId, patch);
+
+      console.log('✅ Atividade atualizada:', updatedActivity);
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const activities = Array.isArray(p.activities) ? p.activities : [];
+        return {
+          ...p,
+          activities: activities.map(a =>
+            a.id === activityId
+              ? {
+                  ...a,
+                  customId: updatedActivity.custom_id,
+                  title: updatedActivity.name,
+                  assignedTo: updatedActivity.responsible,
+                  startDate: updatedActivity.start_date,
+                  endDate: updatedActivity.end_date,
+                  status: updatedActivity.status
+                }
+              : a
+          )
+        };
+      }));
+
+      return updatedActivity;
+    });
+  };
+
+  const duplicateProjectActivity = async (projectId, activityId) => {
+    try {
+      console.log('📅 Duplicando atividade:', { projectId, activityId });
+      
+      const duplicated = await activityService.duplicateActivity(activityId);
+
+      console.log('✅ Atividade duplicada:', duplicated);
+      
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const activities = Array.isArray(p.activities) ? p.activities : [];
+        return {
+          ...p,
+          activities: [...activities, {
+            id: duplicated.id,
+            customId: duplicated.custom_id,
+            title: duplicated.name,
+            assignedTo: duplicated.responsible,
+            startDate: duplicated.start_date,
+            endDate: duplicated.end_date,
+            status: duplicated.status,
+            createdAt: duplicated.created_at
+          }]
+        };
+      }));
+      
+      return duplicated;
+    } catch (error) {
+      console.error('❌ Erro ao duplicar atividade:', error);
+      throw error;
+    }
+  };
+
+  const getProjectActivities = async (projectId) => {
+    try {
+      console.log('📅 Buscando atividades do projeto:', projectId);
+      
+      const activities = await activityService.getProjectActivities(projectId);
+
+      console.log('✅ Atividades encontradas:', activities?.length || 0);
+      
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        return {
+          ...p,
+          activities: activities.map(a => ({
+            id: a.id,
+            customId: a.custom_id,
+            title: a.name,
+            assignedTo: a.responsible,
+            startDate: a.start_date,
+            endDate: a.end_date,
+            status: a.status,
+            createdAt: a.created_at
+          }))
+        };
+      }));
+      
+      return activities;
+    } catch (error) {
+      console.error('❌ Erro ao buscar atividades:', error);
+      return [];
+    }
+  };
+
+  // ========================================
+  // 🔧 FUNÇÕES PARA ARQUIVOS DE PROJETO
+  // ========================================
+
+  const addProjectFile = async (projectId, file, source = 'exxata') => {
+    try {
+      console.log('📁 Fazendo upload de arquivo:', { projectId, fileName: file.name, source });
+
+      const uploadedFile = await fileService.uploadFile(projectId, file, source);
+
+      console.log('✅ Arquivo enviado com sucesso:', uploadedFile);
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const files = Array.isArray(p.files) ? p.files : [];
+        return {
+          ...p,
+          files: [uploadedFile, ...files]
+        };
+      }));
+
+      return uploadedFile;
+    } catch (error) {
+      console.error('❌ Erro ao enviar arquivo:', error);
+      throw error;
+    }
+  };
+
+  const deleteProjectFile = async (projectId, fileId) => {
+    try {
+      console.log('📁 Deletando arquivo:', { projectId, fileId });
+
+      await fileService.deleteFile(fileId);
+
+      console.log('✅ Arquivo deletado com sucesso');
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const files = Array.isArray(p.files) ? p.files : [];
+        return {
+          ...p,
+          files: files.filter(f => f.id !== fileId)
+        };
+      }));
+
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro ao deletar arquivo:', error);
+      throw error;
+    }
+  };
+
+  const getProjectFiles = async (projectId) => {
+    try {
+      console.log('📁 Buscando arquivos do projeto:', projectId);
+
+      const files = await fileService.getProjectFiles(projectId);
+
+      console.log('✅ Arquivos encontrados:', files?.length || 0);
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        return {
+          ...p,
+          files: files.map(f => ({
+            id: f.id,
+            name: f.original_name || f.name,
+            size: f.size_bytes,
+            type: f.mime_type,
+            ext: f.extension,
+            source: f.source,
+            url: f.storage_path, // Para compatibilidade com a UI existente
+            uploadedAt: f.uploaded_at || f.created_at,
+            uploadedBy: f.uploaded_by,
+            author: f.uploaded_by,
+            storagePath: f.storage_path, // Para obter URLs públicas
+            metadata: f.metadata
+          }))
+        };
+      }));
+
+      return files;
+    } catch (error) {
+      console.error('❌ Erro ao buscar arquivos:', error);
+      return [];
+    }
+  };
+
+  const getFileUrl = async (storagePath) => {
+    try {
+      return await fileService.getFileUrl(storagePath);
+    } catch (error) {
+      console.error('❌ Erro ao obter URL do arquivo:', error);
+      return null;
+    }
+  };
+
+  // ========================================
+  // 🔧 FUNÇÕES PARA INDICADORES DE PROJETO
+  // ========================================
+
+  const addProjectIndicator = async (projectId, indicatorData) => {
+    try {
+      console.log('📊 Criando indicador:', { projectId, indicatorData });
+
+      const newIndicator = await indicatorService.createIndicator(projectId, indicatorData);
+
+      console.log('✅ Indicador criado:', newIndicator);
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const indicators = Array.isArray(p.project_indicators) ? p.project_indicators : [];
+        return {
+          ...p,
+          project_indicators: [...indicators, newIndicator]
+        };
+      }));
+
+      return newIndicator;
+    } catch (error) {
+      console.error('❌ Erro ao criar indicador:', error);
+      throw error;
+    }
+  };
+
+  const updateProjectIndicator = async (projectId, indicatorId, updates) => {
+    try {
+      console.log('📊 Atualizando indicador:', { projectId, indicatorId, updates });
+
+      const updatedIndicator = await indicatorService.updateIndicator(indicatorId, updates);
+
+      console.log('✅ Indicador atualizado:', updatedIndicator);
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const indicators = Array.isArray(p.project_indicators) ? p.project_indicators : [];
+        return {
+          ...p,
+          project_indicators: indicators.map(i => 
+            i.id === indicatorId ? updatedIndicator : i
+          )
+        };
+      }));
+
+      return updatedIndicator;
+    } catch (error) {
+      console.error('❌ Erro ao atualizar indicador:', error);
+      throw error;
+    }
+  };
+
+  const deleteProjectIndicator = async (projectId, indicatorId) => {
+    try {
+      console.log('📊 Deletando indicador:', { projectId, indicatorId });
+
+      await indicatorService.deleteIndicator(indicatorId);
+
+      console.log('✅ Indicador deletado com sucesso');
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const indicators = Array.isArray(p.project_indicators) ? p.project_indicators : [];
+        return {
+          ...p,
+          project_indicators: indicators.filter(i => i.id !== indicatorId)
+        };
+      }));
+
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro ao deletar indicador:', error);
+      throw error;
+    }
+  };
+
+  const getProjectIndicators = async (projectId) => {
+    try {
+      console.log('📊 Buscando indicadores do projeto:', projectId);
+
+      const indicators = await indicatorService.getProjectIndicators(projectId);
+
+      console.log('✅ Indicadores encontrados:', indicators?.length || 0);
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        return {
+          ...p,
+          project_indicators: indicators
+        };
+      }));
+
+      return indicators;
+    } catch (error) {
+      console.error('❌ Erro ao buscar indicadores:', error);
+      return [];
+    }
+  };
+
+  const reorderProjectIndicators = async (projectId, newOrder) => {
+    try {
+      console.log('📊 Reordenando indicadores:', { projectId, newOrder });
+
+      await indicatorService.reorderIndicators(projectId, newOrder);
+
+      console.log('✅ Indicadores reordenados com sucesso');
+
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro ao reordenar indicadores:', error);
+      throw error;
+    }
+  };
+
+  // Função para recarregar projetos (usada pelos componentes)
+  const refreshProjects = async () => {
+    console.log('🔄 Recarregando projetos...');
+    await loadProjects();
+  };
+
+  // ========================================
+  // 🔧 FUNÇÕES PARA PANORAMA ATUAL
+  // ========================================
+
+  const getProjectPanorama = async (projectId) => {
+    try {
+      console.log('📊 Buscando panorama do projeto:', projectId);
+
+      const panorama = await panoramaService.getProjectPanorama(projectId);
+
+      console.log('✅ Panorama encontrado:', panorama);
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        return {
+          ...p,
+          panorama: panorama
+        };
+      }));
+
+      return panorama;
+    } catch (error) {
+      console.error('❌ Erro ao buscar panorama:', error);
+      return {
+        tecnica: { status: 'green', items: [] },
+        fisica: { status: 'green', items: [] },
+        economica: { status: 'green', items: [] }
       };
-      return { ...p, activities: [created, ...prevList] };
-    }));
-    return created;
+    }
   };
 
-  const updateProjectActivity = (projectId, activityId, patch) => {
-    setProjects(prev => prev.map(p => {
-      if (p.id !== Number(projectId)) return p;
-      const prevList = Array.isArray(p.activities) ? p.activities : [];
-      return { ...p, activities: prevList.map(a => a.id === activityId ? { ...a, ...patch } : a) };
-    }));
+  const updatePanoramaStatus = async (projectId, sectionKey, status) => {
+    try {
+      console.log('📊 Atualizando status do panorama:', { projectId, sectionKey, status });
+
+      const result = await panoramaService.updatePanoramaStatus(projectId, sectionKey, status);
+
+      console.log('✅ Status do panorama atualizado:', result);
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const currentPanorama = p.panorama || {};
+        return {
+          ...p,
+          panorama: {
+            ...currentPanorama,
+            [sectionKey]: {
+              ...currentPanorama[sectionKey],
+              status: status
+            }
+          }
+        };
+      }));
+
+      return result;
+    } catch (error) {
+      console.error('❌ Erro ao atualizar status do panorama:', error);
+      throw error;
+    }
   };
 
-  const deleteProjectActivity = (projectId, activityId) => {
-    setProjects(prev => prev.map(p => {
-      if (p.id !== Number(projectId)) return p;
-      const prevList = Array.isArray(p.activities) ? p.activities : [];
-      return { ...p, activities: prevList.filter(a => a.id !== activityId) };
-    }));
+  const addPanoramaItem = async (projectId, sectionKey, text) => {
+    try {
+      console.log('📊 Adicionando item ao panorama:', { projectId, sectionKey, text });
+
+      const newItem = await panoramaService.addPanoramaItem(projectId, sectionKey, text);
+
+      console.log('✅ Item adicionado ao panorama:', newItem);
+
+      // Atualizar estado local
+      setProjects(prev => {
+        const updatedProjects = [...prev];
+        const projectIndex = updatedProjects.findIndex(p => p.id === Number(projectId));
+        if (projectIndex !== -1) {
+          const project = updatedProjects[projectIndex];
+          const currentPanorama = project.panorama || {};
+          const currentSection = currentPanorama[sectionKey] || { status: 'green', items: [] };
+          const newPanorama = {
+            ...currentPanorama,
+            [sectionKey]: {
+              ...currentSection,
+              items: [...currentSection.items, newItem]
+            }
+          };
+          updatedProjects[projectIndex] = {
+            ...project,
+            panorama: newPanorama
+          };
+        }
+        return updatedProjects;
+      });
+
+      return newItem;
+    } catch (error) {
+      console.error('❌ Erro ao adicionar item ao panorama:', error);
+      throw error;
+    }
   };
 
-  // Duplicate activity: clone with new id and next sequential 'seq', place after the original
-  const duplicateProjectActivity = (projectId, activityId) => {
-    let created = null;
-    setProjects(prev => prev.map(p => {
-      if (p.id !== Number(projectId)) return p;
-      const prevList = Array.isArray(p.activities) ? p.activities : [];
-      const idx = prevList.findIndex(a => a.id === activityId);
-      if (idx === -1) return p;
-      const src = prevList[idx];
-      const maxSeq = prevList.reduce((m, x) => Math.max(m, Number(x.seq) || 0), 0);
-      created = {
-        ...src,
-        id: Date.now() + Math.random(),
-        seq: maxSeq + 1,
-        title: src.title ? `${src.title} (cópia)` : 'Atividade (cópia)',
-        createdAt: new Date().toISOString(),
-        createdBy: { id: user?.id ?? null, name: user?.name ?? 'Usuário', email: user?.email ?? '' },
-      };
-      const next = [
-        ...prevList.slice(0, idx + 1),
-        created,
-        ...prevList.slice(idx + 1),
-      ];
-      return { ...p, activities: next };
-    }));
-    return created;
+  const updatePanoramaItem = async (projectId, sectionKey, itemId, text) => {
+    try {
+      console.log('📊 Atualizando item do panorama:', { projectId, sectionKey, itemId, text });
+
+      const result = await panoramaService.updatePanoramaItem(projectId, sectionKey, itemId, text);
+
+      console.log('✅ Item do panorama atualizado:', result);
+
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const currentPanorama = p.panorama || {};
+        const currentSection = currentPanorama[sectionKey] || { status: 'green', items: [] };
+        return {
+          ...p,
+          panorama: {
+            ...currentPanorama,
+            [sectionKey]: {
+              ...currentSection,
+              items: currentSection.items.map(item =>
+                item.id === itemId ? { ...item, text } : item
+              )
+            }
+          }
+        };
+      }));
+
+      return result;
+    } catch (error) {
+      console.error('❌ Erro ao atualizar item do panorama:', error);
+      throw error;
+    }
   };
 
-  // Indicators helpers
-  const addProjectIndicator = (projectId, payload) => {
-    const indicator = {
-      id: Date.now() + Math.random(),
-      title: payload.title || 'Indicador',
-      type: payload.type || 'bar', // 'bar' | 'line' | 'pie'
-      labels: Array.isArray(payload.labels) ? payload.labels : [],
-      datasets: Array.isArray(payload.datasets) ? payload.datasets : [], // [{ name, color, values: number[] }]
-      notes: payload.notes || '',
-      createdAt: new Date().toISOString(),
-      createdBy: { id: user?.id ?? null, name: user?.name ?? 'Usuário', email: user?.email ?? '' },
-    };
-    setProjects(prev => prev.map(p => {
-      if (p.id !== Number(projectId)) return p;
-      const prevList = Array.isArray(p.indicators) ? p.indicators : [];
-      return { ...p, indicators: [indicator, ...prevList] };
-    }));
-    return indicator;
-  };
+  const deletePanoramaItem = async (projectId, sectionKey, itemId) => {
+    try {
+      console.log('📊 Deletando item do panorama:', { projectId, sectionKey, itemId });
 
-  const updateProjectIndicator = (projectId, indicatorId, patch) => {
-    setProjects(prev => prev.map(p => {
-      if (p.id !== Number(projectId)) return p;
-      const prevList = Array.isArray(p.indicators) ? p.indicators : [];
-      return { ...p, indicators: prevList.map(i => i.id === indicatorId ? { ...i, ...patch } : i) };
-    }));
-  };
+      const result = await panoramaService.deletePanoramaItem(projectId, sectionKey, itemId);
 
-  const deleteProjectIndicator = (projectId, indicatorId) => {
-    setProjects(prev => prev.map(p => {
-      if (p.id !== Number(projectId)) return p;
-      const prevList = Array.isArray(p.indicators) ? p.indicators : [];
-      return { ...p, indicators: prevList.filter(i => i.id !== indicatorId) };
-    }));
-  };
+      console.log('✅ Item do panorama deletado');
 
-  // Duplicate indicator (clone as a new one, placed right after the original)
-  const duplicateProjectIndicator = (projectId, indicatorId) => {
-    let created = null;
-    setProjects(prev => prev.map(p => {
-      if (p.id !== Number(projectId)) return p;
-      const prevList = Array.isArray(p.indicators) ? p.indicators : [];
-      const idx = prevList.findIndex(i => i.id === indicatorId);
-      if (idx === -1) return p;
-      const src = prevList[idx];
-      const copy = {
-        ...src,
-        id: Date.now() + Math.random(),
-        title: src.title ? `${src.title} (cópia)` : 'Indicador (cópia)',
-        createdAt: new Date().toISOString(),
-        createdBy: { id: user?.id ?? null, name: user?.name ?? 'Usuário', email: user?.email ?? '' },
-        labels: Array.isArray(src.labels) ? [...src.labels] : [],
-        datasets: Array.isArray(src.datasets) ? src.datasets.map(ds => ({ ...ds, values: Array.isArray(ds.values) ? [...ds.values] : [] })) : [],
-      };
-      created = copy;
-      const next = [
-        ...prevList.slice(0, idx + 1),
-        copy,
-        ...prevList.slice(idx + 1),
-      ];
-      return { ...p, indicators: next };
-    }));
-    return created;
-  };
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const currentPanorama = p.panorama || {};
+        const currentSection = currentPanorama[sectionKey] || { status: 'green', items: [] };
+        return {
+          ...p,
+          panorama: {
+            ...currentPanorama,
+            [sectionKey]: {
+              ...currentSection,
+              items: currentSection.items.filter(item => item.id !== itemId)
+            }
+          }
+        };
+      }));
 
-  // Reorder indicators moving item from one index to another
-  const reorderProjectIndicators = (projectId, fromIndex, toIndex) => {
-    setProjects(prev => prev.map(p => {
-      if (p.id !== Number(projectId)) return p;
-      const list = Array.isArray(p.indicators) ? [...p.indicators] : [];
-      const len = list.length;
-      if (len <= 1) return p;
-      const f = Math.max(0, Math.min(len - 1, Number(fromIndex)));
-      const t = Math.max(0, Math.min(len - 1, Number(toIndex)));
-      if (Number.isNaN(f) || Number.isNaN(t) || f === t) return p;
-      const [moved] = list.splice(f, 1);
-      const insertIndex = f < t ? t - 1 : t;
-      list.splice(insertIndex, 0, moved);
-      return { ...p, indicators: list };
-    }));
-  };
-
-  // Helper: convert File to Data URL for local persistence
-  const fileToDataUrl = (file) => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
-  // Add a file to a project with metadata. Source: 'client' | 'exxata'
-  const addProjectFile = async (projectId, file, source = 'exxata', author) => {
-    const project = getProjectById(projectId);
-    if (!project) throw new Error('Projeto não encontrado');
-    const dataUrl = await fileToDataUrl(file);
-    const ext = (file.name.split('.').pop() || '').toLowerCase();
-    const uploadedAt = new Date().toISOString();
-    const uploader = author || { id: user?.id ?? null, name: user?.name ?? 'Usuário', email: user?.email ?? '' };
-    const fileEntry = {
-      id: Date.now() + Math.random(),
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      ext,
-      source,
-      url: dataUrl,
-      uploadedAt,
-      uploadedBy: uploader,
-      author: uploader,
-    };
-    setProjects(prev => prev.map(p => {
-      if (p.id !== Number(projectId)) return p;
-      const prevFiles = Array.isArray(p.files) ? p.files : [];
-      return { ...p, files: [fileEntry, ...prevFiles] };
-    }));
-    return fileEntry;
-  };
-
-  const deleteProjectFile = (projectId, fileId) => {
-    setProjects(prev => prev.map(p => {
-      if (p.id !== Number(projectId)) return p;
-      const prevFiles = Array.isArray(p.files) ? p.files : [];
-      return { ...p, files: prevFiles.filter(f => f.id !== fileId) };
-    }));
-  };
-
-  const getProjectFiles = (projectId) => {
-    const p = getProjectById(projectId);
-    return Array.isArray(p?.files) ? p.files : [];
+      return result;
+    } catch (error) {
+      console.error('❌ Erro ao deletar item do panorama:', error);
+      throw error;
+    }
   };
 
   const userCanSeeProject = (p) => {
@@ -679,8 +1173,6 @@ export function ProjectsProvider({ children }) {
     }
     return false;
   };
-
-  // ========================================
   // 🔧 FUNÇÕES PARA MEMBROS DE PROJETO
   // ========================================
   
@@ -688,11 +1180,11 @@ export function ProjectsProvider({ children }) {
     try {
       console.log('👥 Adicionando membro ao projeto:', { projectId, userId, role });
       
-      // Usar insert direto na tabela project_members (coluna 'project' é TEXT)
+      // Usar insert direto na tabela project_members
       const { data, error } = await supabase
         .from('project_members')
         .insert({
-          project: projectId.toString(), // Converter para string, pois coluna é TEXT
+          project_id: projectId, // Usar project_id ao invés de project
           user_id: userId,
           role: role,
           added_by: user?.id,
@@ -721,11 +1213,11 @@ export function ProjectsProvider({ children }) {
     try {
       console.log('👥 Removendo membro do projeto:', { projectId, userId });
       
-      // Usar delete direto na tabela project_members (coluna 'project' é TEXT)
+      // Usar delete direto na tabela project_members
       const { error } = await supabase
         .from('project_members')
         .delete()
-        .eq('project', projectId.toString()) // Converter para string
+        .eq('project_id', projectId) // Usar project_id ao invés de project
         .eq('user_id', userId);
 
       if (error) {
@@ -750,19 +1242,25 @@ export function ProjectsProvider({ children }) {
       console.log('👥 Buscando membros do projeto:', projectId);
       
       // Buscar membros diretamente da tabela com JOIN para profiles
+      // Especificar explicitamente qual relação usar para evitar ambiguidade
       const { data, error } = await supabase
         .from('project_members')
         .select(`
           *,
-          profiles (
+          profiles:profiles!project_members_user_id_fkey (
             id,
             name,
             email,
             role,
             status
+          ),
+          added_by_profile:profiles!project_members_added_by_fkey (
+            id,
+            name,
+            email
           )
         `)
-        .eq('project', projectId.toString()); // Converter para string
+        .eq('project_id', projectId); // Usar project_id ao invés de project
 
       if (error) {
         console.error('❌ Erro ao buscar membros:', error);
@@ -777,30 +1275,228 @@ export function ProjectsProvider({ children }) {
     }
   };
 
+  const loadProjectMembers = async (projectId) => {
+    try {
+      console.log('👥 Carregando membros do projeto:', projectId);
+      
+      const members = await getProjectMembers(projectId);
+      
+      console.log('✅ Membros carregados:', members?.length || 0);
+      return members;
+    } catch (error) {
+      console.error('❌ Erro ao carregar membros:', error);
+      return [];
+    }
+  };
+
+  // ========================================
+  // 🔧 FUNÇÕES PARA CONDUTAS DE PROJETO
+  // ========================================
+  
+  const addProjectConduct = async (projectId, conductData) => {
+    try {
+      console.log('📋 Adicionando conduta ao projeto:', { projectId, conductData });
+      
+      // Obter a ordem máxima atual
+      const project = getProjectById(projectId);
+      const currentConducts = Array.isArray(project?.conducts) ? project.conducts : [];
+      const maxOrder = currentConducts.reduce((max, c) => Math.max(max, c.order || 0), -1);
+      
+      const newConduct = await conductService.createConduct(projectId, {
+        content: conductData.text || conductData.content || '',
+        urgency: conductData.urgency || 'Normal',
+        display_order: maxOrder + 1
+      });
+
+      console.log('✅ Conduta adicionada com sucesso:', newConduct);
+      
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const conducts = Array.isArray(p.conducts) ? p.conducts : [];
+        return {
+          ...p,
+          conducts: [...conducts, {
+            id: newConduct.id,
+            text: newConduct.content,
+            urgency: newConduct.urgency,
+            order: newConduct.display_order,
+            createdAt: newConduct.created_at,
+            createdBy: newConduct.created_by
+          }]
+        };
+      }));
+      
+      return newConduct;
+    } catch (error) {
+      console.error('❌ Erro ao adicionar conduta:', error);
+      throw error;
+    }
+  };
+
+  const updateProjectConduct = async (projectId, conductId, updates) => {
+    try {
+      console.log('📋 Atualizando conduta:', { projectId, conductId, updates });
+      
+      // Mapear campos do formato local para Supabase
+      const supabaseUpdates = {};
+      if (updates.text !== undefined) supabaseUpdates.content = updates.text;
+      if (updates.urgency !== undefined) supabaseUpdates.urgency = updates.urgency;
+      if (updates.order !== undefined) supabaseUpdates.display_order = updates.order;
+      
+      const updatedConduct = await conductService.updateConduct(conductId, supabaseUpdates);
+
+      console.log('✅ Conduta atualizada com sucesso:', updatedConduct);
+      
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const conducts = Array.isArray(p.conducts) ? p.conducts : [];
+        return {
+          ...p,
+          conducts: conducts.map(c => 
+            c.id === conductId 
+              ? {
+                  ...c,
+                  text: updatedConduct.content,
+                  urgency: updatedConduct.urgency,
+                  order: updatedConduct.display_order
+                }
+              : c
+          )
+        };
+      }));
+      
+      return updatedConduct;
+    } catch (error) {
+      console.error('❌ Erro ao atualizar conduta:', error);
+      throw error;
+    }
+  };
+
+  const deleteProjectConduct = async (projectId, conductId) => {
+    try {
+      console.log('📋 Deletando conduta:', { projectId, conductId });
+      
+      await conductService.deleteConduct(conductId);
+
+      console.log('✅ Conduta deletada com sucesso');
+      
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const conducts = Array.isArray(p.conducts) ? p.conducts : [];
+        return {
+          ...p,
+          conducts: conducts.filter(c => c.id !== conductId)
+        };
+      }));
+      
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro ao deletar conduta:', error);
+      throw error;
+    }
+  };
+
+  const reorderProjectConducts = async (projectId, newOrder) => {
+    try {
+      console.log('📋 Reordenando condutas:', { projectId, newOrder });
+      
+      await conductService.reorderConducts(projectId, newOrder);
+
+      console.log('✅ Condutas reordenadas com sucesso');
+      
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        const conducts = Array.isArray(p.conducts) ? p.conducts : [];
+        const reordered = newOrder.map((id, index) => {
+          const conduct = conducts.find(c => c.id === id);
+          return conduct ? { ...conduct, order: index } : null;
+        }).filter(Boolean);
+        return { ...p, conducts: reordered };
+      }));
+      
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro ao reordenar condutas:', error);
+      throw error;
+    }
+  };
+
+  const getProjectConducts = async (projectId) => {
+    try {
+      console.log('📋 Buscando condutas do projeto:', projectId);
+      
+      const conducts = await conductService.getProjectConducts(projectId);
+
+      console.log('✅ Condutas encontradas:', conducts?.length || 0);
+      
+      // Atualizar estado local
+      setProjects(prev => prev.map(p => {
+        if (p.id !== Number(projectId)) return p;
+        return {
+          ...p,
+          conducts: conducts.map(c => ({
+            id: c.id,
+            text: c.content,
+            urgency: c.urgency,
+            order: c.display_order,
+            createdAt: c.created_at,
+            createdBy: c.created_by
+          }))
+        };
+      }));
+      
+      return conducts;
+    } catch (error) {
+      console.error('❌ Erro ao buscar condutas:', error);
+      return [];
+    }
+  };
+
   const value = useMemo(() => ({
     projects,
     isLoading,
     createProject,
     updateProject,
+    updateProjectBackend,
     deleteProject,
     addProjectFile,
     deleteProjectFile,
     getProjectFiles,
+    getFileUrl,
     addProjectActivity,
     updateProjectActivity,
     deleteProjectActivity,
     duplicateProjectActivity,
+    getProjectActivities,
     addProjectIndicator,
     updateProjectIndicator,
     deleteProjectIndicator,
-    duplicateProjectIndicator,
+    getProjectIndicators,
     reorderProjectIndicators,
+    refreshProjects,
     getProjectById,
     userCanSeeProject,
     // 🆕 Funções para membros de projeto
     addProjectMember,
     removeProjectMember,
     getProjectMembers,
+    loadProjectMembers,
+    // 🆕 Funções para condutas de projeto
+    addProjectConduct,
+    updateProjectConduct,
+    deleteProjectConduct,
+    reorderProjectConducts,
+    getProjectConducts,
+    // 🆕 Funções para panorama atual
+    getProjectPanorama,
+    updatePanoramaStatus,
+    addPanoramaItem,
+    updatePanoramaItem,
+    deletePanoramaItem,
   }), [projects, isLoading, user]);
 
   return (

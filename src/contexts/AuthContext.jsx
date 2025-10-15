@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase';
 export const AuthContext = createContext(null);
 
 // Função helper para timeout em promises
-const withTimeout = (promise, ms = 12000) => {
+const withTimeout = (promise, ms = 8000) => {
   return Promise.race([
     promise,
     new Promise((_, reject) =>
@@ -72,7 +72,7 @@ const getUserProfile = async (supabaseUser) => {
           .select('*')
           .eq('id', supabaseUser.id)
           .single(),
-        5000 // 5 segundos de timeout
+        3000 // 3 segundos de timeout para busca de perfil
       );
 
       if (error) {
@@ -172,7 +172,7 @@ export const AuthProvider = ({ children }) => {
         try {
           const result = await withTimeout(
             supabase.auth.getSession(),
-            5000 // 5 segundos de timeout
+            3000 // 3 segundos de timeout para verificação de sessão
           );
           session = result.data?.session;
           sessionError = result.error;

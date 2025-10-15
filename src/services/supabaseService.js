@@ -4,6 +4,8 @@
 // =====================================================
 
 import { supabase } from '@/lib/supabase';
+import { loadTeam } from '@/services/profiles';
+import { inviteUser as inviteUserWithAdminRole } from '@/services/invite';
 
 // =====================================================
 // 1. SERVIÇOS DE USUÁRIOS/PROFILES
@@ -33,13 +35,14 @@ export const profileService = {
   // Listar todos os usuários (apenas admin/manager)
   async getAllProfiles() {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data || [];
+      const team = await loadTeam(supabase);
+      return (team || []).map((member) => ({
+        ...member,
+        status:
+          typeof member.statusLabel === 'string' && member.statusLabel.trim().length > 0
+            ? member.statusLabel
+            : member.status ?? 'Ativo',
+      }));
     } catch (error) {
       console.error('Erro ao listar profiles:', error);
       return [];
@@ -71,17 +74,34 @@ export const profileService = {
   async inviteUser(email, role, invitedBy) {
     try {
       // Primeiro, registrar o usuário via Auth
-      const { data: authData, error: authError } = await supabase.auth.admin.inviteUserByEmail(email, {
-        data: {
-          role: role,
-          invited_by: invitedBy,
-          invited_at: new Date().toISOString()
+      const normalizedEmail = String(email).trim();
+      const fullName = normalizedEmail
+        .split('@')[0]
+        .split(/[._-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+
+      const inviteResult = await inviteUserWithAdminRole(supabase, normalizedEmail, fullName || undefined);
+
+      const invitedUser = inviteResult?.user ?? null;
+
+      if (invitedUser) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({
+              role: role ?? null,
+              invited_by: invitedBy ?? null,
+              invited_at: new Date().toISOString(),
+            })
+            .eq('id', invitedUser.id);
+        } catch (innerError) {
+          console.warn('Não foi possível sincronizar dados adicionais do convite:', innerError);
         }
-      });
+      }
 
-      if (authError) throw authError;
-
-      return { success: true, user: authData.user };
+      return { success: true, user: invitedUser };
     } catch (error) {
       console.error('Erro ao convidar usuário:', error);
       throw error;
@@ -128,7 +148,7 @@ export const projectService = {
           project_members(
             user_id,
             role,
-            profiles(name, email, role)
+            profiles:profiles!project_members_user_id_fkey(name, email, role)
           )
         `)
         .order('created_at', { ascending: false });
@@ -154,7 +174,7 @@ export const projectService = {
             user_id,
             role,
             added_at,
-            profiles(id, name, email, role)
+            profiles:profiles!project_members_user_id_fkey(id, name, email, role)
           ),
           activities(
             id,
@@ -186,12 +206,14 @@ export const projectService = {
           project_indicators(
             id,
             title,
-            type,
-            datasets,
+            chart_type,
             labels,
-            colors,
+            datasets,
+            options,
             display_order,
-            created_at
+            created_at,
+            updated_at,
+            created_by
           ),
           project_conducts(
             id,
@@ -218,22 +240,62 @@ export const projectService = {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
 
-      const { data, error } = await supabase
+      // Função auxiliar para limpar e converter valores monetários
+      const parseCurrency = (value) => {
+        if (typeof value === 'number') return value;
+        if (typeof value !== 'string') return 0;
+        // Remove 'R$', espaços, e usa '.' como separador de milhar, depois remove, e troca ',' por '.'
+        const cleanedValue = value.replace(/R\$\s?/, '').replace(/\./g, '').replace(',', '.');
+        const number = parseFloat(cleanedValue);
+        return isNaN(number) ? 0 : number;
+      };
+
+      // 1. Preparar o objeto de inserção com dados limpos e convertidos
+      const projectToInsert = {
+        name: projectData.name,
+        client: projectData.client,
+        description: projectData.description,
+        location: projectData.location,
+        sector: projectData.sector,
+        contract_summary: projectData.contractSummary,
+        phase: projectData.phase || 'Planejamento',
+        status: projectData.status || 'Planejamento',
+        progress: 0,
+        start_date: projectData.startDate || null,
+        end_date: projectData.endDate || null,
+        created_by: user.id,
+        updated_by: user.id,
+
+        // Campos convertidos para NUMERIC
+        contract_value: parseCurrency(projectData.contractValue),
+        hourly_rate: parseCurrency(projectData.hourlyRate),
+        disputed_amount: parseCurrency(projectData.disputedAmount),
+        billing_progress: parseInt(projectData.billingProgress, 10) || 0,
+
+        // Campos JSONB da lógica V0
+        exxata_activities: projectData.exxataActivities || [],
+        conducts: projectData.conducts || [],
+        panorama: projectData.panorama || {
+          tecnica: { status: 'green', items: [] },
+          fisica: { status: 'green', items: [] },
+          economica: { status: 'green', items: [] }
+        },
+        overview_cards: projectData.overviewCards || [],
+        ai_predictive_text: projectData.aiPredictiveText || null
+      };
+
+      // 2. Inserir no Supabase
+      const { data: project, error: projectError } = await supabase
         .from('projects')
-        .insert({
-          ...projectData,
-          created_by: user.id,
-          updated_by: user.id
-        })
+        .insert(projectToInsert)
         .select()
         .single();
 
-      if (error) throw error;
+      if (projectError) throw projectError;
 
-      // Adicionar criador como membro do projeto
-      await this.addProjectMember(data.id, user.id, 'owner');
+      // 3. O trigger 'add_creator_as_member_trigger' cuida da adição do membro.
 
-      return data;
+      return project;
     } catch (error) {
       console.error('Erro ao criar projeto:', error);
       throw error;
@@ -280,7 +342,7 @@ export const projectService = {
         })
         .select(`
           *,
-          profiles(id, name, email, role)
+          profiles:profiles!project_members_user_id_fkey(id, name, email, role)
         `)
         .single();
 
@@ -319,10 +381,10 @@ export const activityService = {
   async getProjectActivities(projectId) {
     try {
       const { data, error } = await supabase
-        .from('activities')
+        .from('project_activities_old')
         .select('*')
         .eq('project_id', projectId)
-        .order('seq', { ascending: true });
+        .order('custom_id', { ascending: true });
 
       if (error) throw error;
       return data || [];
@@ -335,15 +397,16 @@ export const activityService = {
   // Criar atividade
   async createActivity(projectId, activityData) {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Usuário não autenticado');
-
       const { data, error } = await supabase
-        .from('activities')
+        .from('project_activities_old')
         .insert({
-          ...activityData,
           project_id: projectId,
-          created_by: user.id
+          custom_id: activityData.customId || activityData.custom_id,
+          name: activityData.title || activityData.name,
+          responsible: activityData.assignedTo || activityData.responsible,
+          start_date: activityData.startDate || activityData.start_date,
+          end_date: activityData.endDate || activityData.end_date,
+          status: activityData.status || 'A Fazer'
         })
         .select()
         .single();
@@ -359,9 +422,18 @@ export const activityService = {
   // Atualizar atividade
   async updateActivity(activityId, updates) {
     try {
+      // Mapear campos da UI para o schema do banco
+      const dbUpdates = {};
+      if (updates.customId !== undefined) dbUpdates.custom_id = updates.customId;
+      if (updates.title !== undefined) dbUpdates.name = updates.title;
+      if (updates.assignedTo !== undefined) dbUpdates.responsible = updates.assignedTo;
+      if (updates.startDate !== undefined) dbUpdates.start_date = updates.startDate;
+      if (updates.endDate !== undefined) dbUpdates.end_date = updates.endDate;
+      if (updates.status !== undefined) dbUpdates.status = updates.status;
+
       const { data, error } = await supabase
-        .from('activities')
-        .update(updates)
+        .from('project_activities_old')
+        .update(dbUpdates)
         .eq('id', activityId)
         .select()
         .single();
@@ -378,7 +450,7 @@ export const activityService = {
   async deleteActivity(activityId) {
     try {
       const { error } = await supabase
-        .from('activities')
+        .from('project_activities_old')
         .delete()
         .eq('id', activityId);
 
@@ -395,7 +467,7 @@ export const activityService = {
     try {
       // Primeiro, obter a atividade original
       const { data: original, error: getError } = await supabase
-        .from('activities')
+        .from('project_activities_old')
         .select('*')
         .eq('id', activityId)
         .single();
@@ -411,19 +483,27 @@ export const activityService = {
       newStart.setDate(newStart.getDate() + 1);
       const newEnd = new Date(newStart.getTime() + duration);
 
+      // Gerar próximo custom_id
+      const { data: allActivities } = await supabase
+        .from('project_activities_old')
+        .select('custom_id')
+        .eq('project_id', original.project_id);
+      
+      const existingIds = (allActivities || []).map(a => a.custom_id).filter(Boolean);
+      const numericIds = existingIds.map(id => parseInt(id)).filter(id => !isNaN(id));
+      const nextId = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
+
       // Criar cópia
       const { data, error } = await supabase
-        .from('activities')
+        .from('project_activities_old')
         .insert({
           project_id: original.project_id,
-          title: `${original.title} (Cópia)`,
-          description: original.description,
-          assigned_to: original.assigned_to,
-          assigned_user_id: original.assigned_user_id,
+          custom_id: String(nextId).padStart(2, '0'),
+          name: `${original.name} (Cópia)`,
+          responsible: original.responsible,
           start_date: newStart.toISOString().split('T')[0],
           end_date: newEnd.toISOString().split('T')[0],
-          status: 'A Fazer',
-          created_by: original.created_by
+          status: 'A Fazer'
         })
         .select()
         .single();
@@ -442,16 +522,36 @@ export const activityService = {
 // =====================================================
 
 export const fileService = {
+  // Listar arquivos do projeto
+  async getProjectFiles(projectId) {
+    try {
+      const { data, error } = await supabase
+        .from('project_files')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('uploaded_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Erro ao listar arquivos:', error);
+      return [];
+    }
+  },
+
   // Upload de arquivo
   async uploadFile(projectId, file, source = 'exxata') {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
 
+      // Garantir que projectId seja um número
+      const numericProjectId = Number(projectId);
+
       // Gerar nome único para o arquivo
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `${projectId}/${fileName}`;
+      const filePath = `${numericProjectId}/${fileName}`;
 
       // Upload para o Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -464,17 +564,19 @@ export const fileService = {
       const { data, error } = await supabase
         .from('project_files')
         .insert({
-          project_id: projectId,
-          name: fileName,
-          original_name: file.name,
+          project_id: numericProjectId,
+          name: file.name, // Display name
+          original_name: file.name, // Original filename
           size_bytes: file.size,
           mime_type: file.type,
           extension: fileExt,
           storage_path: uploadData.path,
           source: source,
           uploaded_by: user.id,
+          uploaded_at: new Date().toISOString(),
           metadata: {
-            uploaded_at: new Date().toISOString()
+            uploaded_at: new Date().toISOString(),
+            browser_info: navigator.userAgent
           }
         })
         .select()
@@ -488,14 +590,19 @@ export const fileService = {
     }
   },
 
-  // Obter URL pública do arquivo
-  async getFileUrl(filePath) {
+  // Obter URL do arquivo (usando URL pública já que o bucket é público)
+  async getFileUrl(storagePath) {
     try {
+      // Como o bucket está público, usar URL pública diretamente
       const { data } = supabase.storage
         .from('project-files')
-        .getPublicUrl(filePath);
+        .getPublicUrl(storagePath);
 
-      return data.publicUrl;
+      if (data?.publicUrl) {
+        return data.publicUrl;
+      }
+
+      throw new Error('Não foi possível gerar URL para o arquivo');
     } catch (error) {
       console.error('Erro ao obter URL do arquivo:', error);
       return null;
@@ -532,6 +639,24 @@ export const fileService = {
       return { success: true };
     } catch (error) {
       console.error('Erro ao deletar arquivo:', error);
+      throw error;
+    }
+  },
+
+  // Atualizar metadados do arquivo
+  async updateFile(fileId, updates) {
+    try {
+      const { data, error } = await supabase
+        .from('project_files')
+        .update(updates)
+        .eq('id', fileId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Erro ao atualizar arquivo:', error);
       throw error;
     }
   }
@@ -586,9 +711,12 @@ export const indicatorService = {
   // Atualizar indicador
   async updateIndicator(indicatorId, updates) {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
       const { data, error } = await supabase
         .from('project_indicators')
-        .update(updates)
+        .update({ ...updates, updated_by: user.id })
         .eq('id', indicatorId)
         .select()
         .single();
@@ -649,7 +777,7 @@ export const conductService = {
       const { data, error } = await supabase
         .from('project_conducts')
         .select('*')
-        .eq('project_id', projectId)
+        .eq('project', projectId)
         .order('display_order', { ascending: true });
 
       if (error) throw error;
@@ -740,8 +868,238 @@ export const conductService = {
 };
 
 // =====================================================
-// 7. UTILITÁRIOS
+// 8. SERVIÇOS DE PANORAMA ATUAL
 // =====================================================
+
+export const panoramaService = {
+  // Obter panorama completo do projeto
+  async getProjectPanorama(projectId) {
+    try {
+      const { data, error } = await supabase
+        .from('project_panorama')
+        .select('*')
+        .eq('project_id', projectId);
+
+      if (error) throw error;
+
+      // Converter para formato esperado pela UI
+      const panorama = {};
+      (data || []).forEach(item => {
+        panorama[item.section_key] = {
+          status: item.status,
+          items: Array.isArray(item.items) ? item.items : []
+        };
+      });
+
+      // Garantir que todas as seções existam
+      const sections = ['tecnica', 'fisica', 'economica'];
+      sections.forEach(section => {
+        if (!panorama[section]) {
+          panorama[section] = { status: 'green', items: [] };
+        }
+      });
+
+      return panorama;
+    } catch (error) {
+      console.error('Erro ao obter panorama:', error);
+      return {
+        tecnica: { status: 'green', items: [] },
+        fisica: { status: 'green', items: [] },
+        economica: { status: 'green', items: [] }
+      };
+    }
+  },
+
+  // Atualizar status de uma seção
+  async updatePanoramaStatus(projectId, sectionKey, status) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
+      // Primeiro verificar se já existe
+      const { data: existing } = await supabase
+        .from('project_panorama')
+        .select('id, items')
+        .eq('project_id', projectId)
+        .eq('section_key', sectionKey)
+        .single();
+
+      if (existing) {
+        // Atualizar
+        const { data, error } = await supabase
+          .from('project_panorama')
+          .update({
+            status,
+            updated_by: user.id
+          })
+          .eq('id', existing.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      } else {
+        // Criar novo
+        const { data, error } = await supabase
+          .from('project_panorama')
+          .insert({
+            project_id: projectId,
+            section_key: sectionKey,
+            status,
+            items: [],
+            created_by: user.id,
+            updated_by: user.id
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data;
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar status do panorama:', error);
+      throw error;
+    }
+  },
+
+  // Adicionar item a uma seção
+  async addPanoramaItem(projectId, sectionKey, text) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
+      // Primeiro obter ou criar a seção
+      let sectionData;
+      const { data: existing } = await supabase
+        .from('project_panorama')
+        .select('id, items')
+        .eq('project_id', projectId)
+        .eq('section_key', sectionKey)
+        .single();
+
+      if (existing) {
+        // Adicionar item à lista existente
+        const currentItems = Array.isArray(existing.items) ? existing.items : [];
+        const newItem = { id: Date.now() + Math.random(), text };
+        const updatedItems = [...currentItems, newItem];
+
+        const { data, error } = await supabase
+          .from('project_panorama')
+          .update({
+            items: updatedItems,
+            updated_by: user.id
+          })
+          .eq('id', existing.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        sectionData = data;
+      } else {
+        // Criar nova seção com o item
+        const newItem = { id: Date.now() + Math.random(), text };
+        const { data, error } = await supabase
+          .from('project_panorama')
+          .insert({
+            project_id: projectId,
+            section_key: sectionKey,
+            status: 'green',
+            items: [newItem],
+            created_by: user.id,
+            updated_by: user.id
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        sectionData = data;
+      }
+
+      return newItem;
+    } catch (error) {
+      console.error('Erro ao adicionar item ao panorama:', error);
+      throw error;
+    }
+  },
+
+  // Atualizar item de uma seção
+  async updatePanoramaItem(projectId, sectionKey, itemId, text) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
+      // Obter a seção atual
+      const { data: existing } = await supabase
+        .from('project_panorama')
+        .select('id, items')
+        .eq('project_id', projectId)
+        .eq('section_key', sectionKey)
+        .single();
+
+      if (!existing) throw new Error('Seção não encontrada');
+
+      // Atualizar o item na lista
+      const currentItems = Array.isArray(existing.items) ? existing.items : [];
+      const updatedItems = currentItems.map(item =>
+        item.id === itemId ? { ...item, text } : item
+      );
+
+      const { data, error } = await supabase
+        .from('project_panorama')
+        .update({
+          items: updatedItems,
+          updated_by: user.id
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Erro ao atualizar item do panorama:', error);
+      throw error;
+    }
+  },
+
+  // Remover item de uma seção
+  async deletePanoramaItem(projectId, sectionKey, itemId) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
+      // Obter a seção atual
+      const { data: existing } = await supabase
+        .from('project_panorama')
+        .select('id, items')
+        .eq('project_id', projectId)
+        .eq('section_key', sectionKey)
+        .single();
+
+      if (!existing) throw new Error('Seção não encontrada');
+
+      // Remover o item da lista
+      const currentItems = Array.isArray(existing.items) ? existing.items : [];
+      const updatedItems = currentItems.filter(item => item.id !== itemId);
+
+      const { data, error } = await supabase
+        .from('project_panorama')
+        .update({
+          items: updatedItems,
+          updated_by: user.id
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Erro ao deletar item do panorama:', error);
+      throw error;
+    }
+  }
+};
 
 export const utils = {
   // Verificar se usuário tem acesso ao projeto
@@ -802,5 +1160,6 @@ export default {
   fileService,
   indicatorService,
   conductService,
+  panoramaService,
   utils
 };
