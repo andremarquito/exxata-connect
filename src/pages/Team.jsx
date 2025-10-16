@@ -172,12 +172,18 @@ export function Team() {
     setEditingMember(member);
   };
 
-  const handleDeleteMember = (memberId) => {
+  const handleDeleteMember = async (memberId) => {
     if (!canManageTeam) return;
-    const ok = window.confirm('Remover este membro da base de usuários?');
+    const ok = window.confirm('Remover este membro da base de usuários? Esta ação excluirá permanentemente o usuário do sistema.');
     if (!ok) return;
-    deleteUser(memberId);
-    toast.success('Membro removido com sucesso.');
+
+    try {
+      await deleteUser(memberId);
+      toast.success('Membro removido com sucesso.');
+    } catch (error) {
+      console.error('Erro ao excluir membro:', error);
+      toast.error(`Erro ao excluir membro: ${error.message}`);
+    }
   };
 
   // Função para resetar senha do usuário (apenas Admin)

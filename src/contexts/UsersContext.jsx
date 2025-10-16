@@ -174,8 +174,34 @@ export function UsersProvider({ children }) {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
   };
 
-  const deleteUser = (id) => {
-    setUsers((prev) => prev.filter((u) => u.id !== id));
+  const deleteUser = async (id) => {
+    try {
+      console.log(`Attempting to delete user: ${id}`)
+
+      // First, call Supabase Edge Function to delete from auth and profiles
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { user_id: id }
+      })
+
+      if (error) {
+        console.error('Error calling delete-user function:', error)
+        throw new Error('Falha ao excluir usuário do Supabase')
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.error || 'Erro desconhecido ao excluir usuário')
+      }
+
+      console.log(`Successfully deleted user from Supabase: ${id}`)
+
+      // Then remove from local state
+      setUsers((prev) => prev.filter((u) => u.id !== id));
+
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      throw error;
+    }
   };
 
   const getUserById = (id) => users.find((u) => u.id === Number(id));
