@@ -526,8 +526,16 @@ export function ProjectsProvider({ children }) {
         supabaseData.progress = patch.progress;
       }
 
+      if (patch.sector !== undefined) {
+        supabaseData.sector = patch.sector;
+      }
+
       if (patch.status !== undefined) {
         supabaseData.status = patch.status;
+      }
+
+      if (patch.aiPredictiveText !== undefined) {
+        supabaseData.ai_predictive_text = patch.aiPredictiveText;
       }
 
       // Adicionar timestamp de atualização e usuário
@@ -1165,13 +1173,18 @@ const withAuthRetry = async (operation, maxRetries = 1) => {
   };
 
   const userCanSeeProject = (p) => {
-    if (!user) return false;
-    if (user.role === 'admin') return true;
-    if (p.createdBy === user.id) return true;
-    if (Array.isArray(p.team)) {
-      return p.team.some(u => u.id === user.id);
+    try {
+      if (!user) return false;
+      if (user.role === 'admin') return true;
+      if (p.createdBy === user.id) return true;
+      if (Array.isArray(p.team)) {
+        return p.team.some(u => u && u.id === user.id);
+      }
+      return false;
+    } catch (error) {
+      console.error('Erro ao verificar permissões do projeto:', error);
+      return false; // Fallback para não mostrar o projeto
     }
-    return false;
   };
   // 🔧 FUNÇÕES PARA MEMBROS DE PROJETO
   // ========================================

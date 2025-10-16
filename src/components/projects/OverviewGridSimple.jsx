@@ -29,7 +29,7 @@ const CARD_CATALOG = [
   { type: 'billingProgress', label: 'Progresso em Faturamento', icon: BarChart3 },
 ];
 
-export default function OverviewGridSimple({ project, user, canEdit, updateProject }) {
+export default function OverviewGridSimple({ project, user, canEdit, updateProject, updateProjectBackend }) {
   const userRole = (user?.role || '').toLowerCase();
   const isAdmin = userRole === 'admin' || userRole === 'administrador';
   const isManager = userRole === 'manager' || userRole === 'gerente';
@@ -63,7 +63,7 @@ export default function OverviewGridSimple({ project, user, canEdit, updateProje
     setDragOverId(id);
     e.dataTransfer.dropEffect = 'move';
   };
-  const handleDrop = (targetId, e) => {
+  const handleDrop = async (targetId, e) => {
     if (!isEditing) return;
     e.preventDefault();
     const sourceId = draggingId ?? e.dataTransfer.getData('text/plain');
@@ -77,7 +77,21 @@ export default function OverviewGridSimple({ project, user, canEdit, updateProje
     const [moved] = list.splice(fromIndex, 1);
     const insertIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
     list.splice(insertIndex, 0, moved);
-    updateProject(project.id, { overviewConfig: { widgets: list, layouts: {} } });
+
+    const newConfig = { widgets: list, layouts: {} };
+
+    // Atualizar estado local imediatamente
+    updateProject(project.id, { overviewConfig: newConfig });
+
+    // Salvar no backend
+    try {
+      await updateProjectBackend(project.id, { overviewConfig: newConfig });
+    } catch (error) {
+      console.error('Erro ao salvar reordenação no backend:', error);
+      // Reverter mudança local em caso de erro
+      updateProject(project.id, { overviewConfig: config });
+      alert('Erro ao salvar reordenação. Tente novamente.');
+    }
   };
   const handleDragEnd = () => {
     setDraggingId(null);
@@ -85,17 +99,44 @@ export default function OverviewGridSimple({ project, user, canEdit, updateProje
   };
 
   // Função para adicionar widget
-  const addWidget = (type) => {
+  const addWidget = async (type) => {
     const id = 'w_' + Math.floor(Date.now() + Math.random()*1000);
     const nextWidgets = [...widgets, { id, type }];
-    updateProject(project.id, { overviewConfig: { widgets: nextWidgets, layouts: {} } });
+    const newConfig = { widgets: nextWidgets, layouts: {} };
+
+    // Atualizar estado local imediatamente
+    updateProject(project.id, { overviewConfig: newConfig });
+
+    // Salvar no backend
+    try {
+      await updateProjectBackend(project.id, { overviewConfig: newConfig });
+    } catch (error) {
+      console.error('Erro ao salvar configuração no backend:', error);
+      // Reverter mudança local em caso de erro
+      updateProject(project.id, { overviewConfig: config });
+      alert('Erro ao salvar configuração. Tente novamente.');
+    }
+
     setShowAdd(false);
   };
 
   // Função para remover widget
-  const removeWidget = (id) => {
+  const removeWidget = async (id) => {
     const nextWidgets = widgets.filter(w => w.id !== id);
-    updateProject(project.id, { overviewConfig: { widgets: nextWidgets, layouts: {} } });
+    const newConfig = { widgets: nextWidgets, layouts: {} };
+
+    // Atualizar estado local imediatamente
+    updateProject(project.id, { overviewConfig: newConfig });
+
+    // Salvar no backend
+    try {
+      await updateProjectBackend(project.id, { overviewConfig: newConfig });
+    } catch (error) {
+      console.error('Erro ao salvar configuração no backend:', error);
+      // Reverter mudança local em caso de erro
+      updateProject(project.id, { overviewConfig: config });
+      alert('Erro ao salvar configuração. Tente novamente.');
+    }
   };
 
   // Função para exportar dados para Excel
@@ -302,7 +343,7 @@ export default function OverviewGridSimple({ project, user, canEdit, updateProje
             className={`${dragOverId === widget.id ? 'ring-2 ring-exxata-red/40 rounded-lg' : ''}`}
             title={isEditing ? 'Arraste para reordenar' : undefined}
           >
-            {renderCard(widget, isEditing, removeWidget, updateProject, project, canEdit)}
+            {renderCard(widget, isEditing, removeWidget, updateProjectBackend, project, canEdit)}
           </div>
         ))}
       </div>
@@ -347,7 +388,7 @@ export default function OverviewGridSimple({ project, user, canEdit, updateProje
 }
 
 // Função para renderizar cada tipo de card
-function renderCard(widget, isEditing, removeWidget, updateProject, project, canEdit) {
+function renderCard(widget, isEditing, removeWidget, updateProjectBackend, project, canEdit) {
   const type = widget.type;
   
   const headerActions = isEditing ? (
@@ -376,7 +417,7 @@ function renderCard(widget, isEditing, removeWidget, updateProject, project, can
             {canEdit ? (
               <Input
                 defaultValue={project.name}
-                onBlur={(e) => updateProject(project.id, { name: e.target.value })}
+                onBlur={(e) => updateProjectBackend(project.id, { name: e.target.value })}
               />
             ) : (
               <div className="text-2xl font-bold">{project.name || '—'}</div>
@@ -396,7 +437,7 @@ function renderCard(widget, isEditing, removeWidget, updateProject, project, can
             {canEdit ? (
               <Input
                 defaultValue={project.client}
-                onBlur={(e) => updateProject(project.id, { client: e.target.value })}
+                onBlur={(e) => updateProjectBackend(project.id, { client: e.target.value })}
               />
             ) : (
               <div className="text-lg font-medium">{project.client || '—'}</div>
@@ -414,7 +455,7 @@ function renderCard(widget, isEditing, removeWidget, updateProject, project, can
           </CardHeader>
           <CardContent className="p-6 pt-0">
             {canEdit ? (
-              <Select value={project.sector || ''} onValueChange={(v) => updateProject(project.id, { sector: v })}>
+              <Select value={project.sector || ''} onValueChange={(v) => updateProjectBackend(project.id, { sector: v })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um setor" />
                 </SelectTrigger>
@@ -476,7 +517,7 @@ function renderCard(widget, isEditing, removeWidget, updateProject, project, can
                     onClick={() => {
                       const prev = Array.isArray(project.exxataActivities) ? project.exxataActivities : [];
                       const next = prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt];
-                      updateProject(project.id, { exxataActivities: next });
+                      updateProjectBackend(project.id, { exxataActivities: next });
                     }}
                     className={`text-left px-3 py-2 rounded-md border text-sm transition-colors ${
                       selected
@@ -510,17 +551,6 @@ function renderCard(widget, isEditing, removeWidget, updateProject, project, can
             {headerActions}
           </CardHeader>
           <CardContent className="p-6 pt-0">
-            {canEdit && (
-              <div className="flex items-center gap-3 mb-2">
-                <Input 
-                  type="number" 
-                  defaultValue={Number(project.progress || 0)} 
-                  onBlur={(e) => updateProject(project.id, { progress: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} 
-                  className="w-24" 
-                />
-                <span className="text-sm text-muted-foreground">%</span>
-              </div>
-            )}
             <div className="text-2xl font-bold">{Number(project.progress || 0)}%</div>
             <Progress value={Number(project.progress || 0)} className="h-2 mt-2" />
           </CardContent>
@@ -538,7 +568,7 @@ function renderCard(widget, isEditing, removeWidget, updateProject, project, can
             {canEdit ? (
               <Input 
                 defaultValue={project.contractValue} 
-                onBlur={(e) => updateProject(project.id, { contractValue: e.target.value })} 
+                onBlur={(e) => updateProjectBackend(project.id, { contractValue: e.target.value })} 
               />
             ) : (
               <div className="text-2xl font-bold">{project.contractValue}</div>
@@ -614,7 +644,7 @@ function renderCard(widget, isEditing, removeWidget, updateProject, project, can
                   <Input 
                     type="number" 
                     defaultValue={Number(project.billingProgress || 0)} 
-                    onBlur={(e) => updateProject(project.id, { billingProgress: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} 
+                    onBlur={(e) => updateProjectBackend(project.id, { billingProgress: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} 
                     className="w-24" 
                   />
                   <span className="text-sm text-muted-foreground">%</span>
@@ -649,7 +679,7 @@ function renderCard(widget, isEditing, removeWidget, updateProject, project, can
             {canEdit ? (
               <Input
                 defaultValue={project.location || ''}
-                onBlur={(e) => updateProject(project.id, { location: e.target.value })}
+                onBlur={(e) => updateProjectBackend(project.id, { location: e.target.value })}
               />
             ) : (
               <div className="text-lg font-medium">{project.location || '—'}</div>
@@ -670,11 +700,11 @@ function renderCard(widget, isEditing, removeWidget, updateProject, project, can
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-slate-500">Início</label>
-                  <Input type="date" defaultValue={project.startDate || ''} onBlur={(e) => updateProject(project.id, { startDate: e.target.value })} />
+                  <Input type="date" defaultValue={project.startDate || ''} onBlur={(e) => updateProjectBackend(project.id, { startDate: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-xs text-slate-500">Fim</label>
-                  <Input type="date" defaultValue={project.endDate || ''} onBlur={(e) => updateProject(project.id, { endDate: e.target.value })} />
+                  <Input type="date" defaultValue={project.endDate || ''} onBlur={(e) => updateProjectBackend(project.id, { endDate: e.target.value })} />
                 </div>
               </div>
             ) : (
@@ -695,7 +725,7 @@ function renderCard(widget, isEditing, removeWidget, updateProject, project, can
             {canEdit ? (
               <textarea
                 defaultValue={project.description || ''}
-                onBlur={(e) => updateProject(project.id, { description: e.target.value })}
+                onBlur={(e) => updateProjectBackend(project.id, { description: e.target.value })}
                 className="w-full min-h-[100px] border border-slate-200 rounded-md p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             ) : (
@@ -742,7 +772,7 @@ function renderCard(widget, isEditing, removeWidget, updateProject, project, can
             {canEdit ? (
               <Input
                 defaultValue={project.contractSummary || ''}
-                onBlur={(e) => updateProject(project.id, { contractSummary: e.target.value })}
+                onBlur={(e) => updateProjectBackend(project.id, { contractSummary: e.target.value })}
                 placeholder="Ex.: CT - 684N"
               />
             ) : (

@@ -44,7 +44,7 @@ function getDefaultSize(type) {
   }
 }
 
-export default function OverviewGrid({ project, user, canEdit, updateProject }) {
+export default function OverviewGrid({ project, user, canEdit, updateProject, updateProjectBackend }) {
   const userRole = (user?.role || '').toLowerCase();
   const isAdmin = userRole === 'admin' || userRole === 'administrador';
   const isManager = userRole === 'manager' || userRole === 'gerente';
@@ -512,7 +512,7 @@ function renderCard(widget, isEditing, updateProject, project, canEdit) {
             {canEdit ? (
               <Select 
                 value={project.sector || ''} 
-                onValueChange={(value) => updateProject(project.id, { sector: value })}
+                onValueChange={(value) => updateProjectBackend(project.id, { sector: value })}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Selecione um setor" />

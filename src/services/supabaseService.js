@@ -798,7 +798,7 @@ export const conductService = {
         .from('project_conducts')
         .insert({
           ...conductData,
-          project_id: projectId,
+          project: projectId,
           created_by: user.id
         })
         .select()
@@ -970,6 +970,7 @@ export const panoramaService = {
 
       // Primeiro obter ou criar a seção
       let sectionData;
+      const newItem = { id: Date.now() + Math.random(), text };
       const { data: existing } = await supabase
         .from('project_panorama')
         .select('id, items')
@@ -980,7 +981,6 @@ export const panoramaService = {
       if (existing) {
         // Adicionar item à lista existente
         const currentItems = Array.isArray(existing.items) ? existing.items : [];
-        const newItem = { id: Date.now() + Math.random(), text };
         const updatedItems = [...currentItems, newItem];
 
         const { data, error } = await supabase
@@ -997,7 +997,6 @@ export const panoramaService = {
         sectionData = data;
       } else {
         // Criar nova seção com o item
-        const newItem = { id: Date.now() + Math.random(), text };
         const { data, error } = await supabase
           .from('project_panorama')
           .insert({

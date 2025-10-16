@@ -72,7 +72,7 @@ const getUserProfile = async (supabaseUser) => {
           .select('*')
           .eq('id', supabaseUser.id)
           .single(),
-        3000 // 3 segundos de timeout para busca de perfil
+        5000 // 5 segundos de timeout para busca de perfil
       );
 
       if (error) {
@@ -172,7 +172,7 @@ export const AuthProvider = ({ children }) => {
         try {
           const result = await withTimeout(
             supabase.auth.getSession(),
-            3000 // 3 segundos de timeout para verificação de sessão
+            8000 // 8 segundos de timeout para verificação de sessão
           );
           session = result.data?.session;
           sessionError = result.error;
