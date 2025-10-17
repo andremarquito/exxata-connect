@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,6 +8,7 @@ import { X, UserPlus, Mail } from 'lucide-react';
 import { useUsers } from '@/contexts/UsersContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'react-hot-toast';
+import { profileService } from '@/services/supabaseService';
 import { supabase } from '@/lib/supabase';
 
 const roles = [
@@ -20,133 +21,109 @@ const roles = [
 export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { addUser, getUserByEmail } = useUsers();
-  const { protectSession, restoreSession } = useAuth();
+  const { user } = useAuth();
 
   // Filtrar roles baseado no papel do usuário atual
-  const getAvailableRoles = () => {
-    const userRole = (currentUserRole || '').toLowerCase();
-    
-    if (userRole === 'admin' || userRole === 'administrador') {
-      // Admin pode convidar todos
-      return roles;
-    } else if (userRole === 'manager' || userRole === 'gerente') {
-      // Gerente tem mesma função do admin
-      return roles;
-    } else if (userRole === 'collaborator' || userRole === 'colaborador' || userRole === 'consultor' || userRole === 'consultant') {
-      // Colaborador/Consultor só pode convidar colaboradores e clientes
-      return roles.filter(r => r.value === 'collaborator' || r.value === 'client');
-    } else {
-      // Clientes não podem convidar (não deveria chegar aqui)
-      return [];
-    }
-  };
+  const availableRoles = useMemo(() => {
+    const normalized = (currentUserRole || '').toLowerCase();
 
-  const availableRoles = getAvailableRoles();
+    if (normalized === 'admin' || normalized === 'administrador') {
+      return roles;
+    }
+
+    if (normalized === 'manager' || normalized === 'gerente') {
+      return roles.filter((roleOption) => roleOption.value !== 'admin');
+    }
+
+    return [];
+  }, [currentUserRole]);
+
+  const canInvite = availableRoles.length > 0;
 
   const handleInvite = async (e) => {
     e.preventDefault();
-    
+    if (!canInvite) {
+      toast.error('Você não possui permissão para convidar usuários.');
+      return;
+    }
+
     if (!email || !role) {
       toast.error('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
 
+    const existingLocal = getUserByEmail(email);
+    if (existingLocal) {
+      toast.error('Este e-mail já está cadastrado na plataforma.');
+      return;
+    }
+
     try {
-      // Proteger a sessão atual antes de fazer qualquer operação
-      const originalSession = await protectSession();
-      console.log('🔒 Sessão protegida durante convite de usuário');
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
 
-      try {
-        // Verificar se o email já está cadastrado no Supabase
-        // Nota: Verificação via profiles table (mais seguro que admin API)
-        const { data: existingProfile } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('email', email)
-          .single();
-        
-        if (existingProfile) {
-          toast.error('Este e-mail já está cadastrado na plataforma.');
-          return;
-        }
+      if (existingProfile) {
+        toast.error('Este e-mail já está cadastrado na plataforma.');
+        return;
+      }
+    } catch (profileCheckError) {
+      console.warn('Não foi possível verificar usuários existentes no Supabase:', profileCheckError);
+    }
 
-        // Verificar também no sistema local (fallback)
-        const localUser = getUserByEmail(email);
-        if (localUser) {
-          toast.error('Este e-mail já está cadastrado na plataforma.');
-          return;
-        }
+    setIsSubmitting(true);
 
-        // Gerar nome baseado no email
-        const localPart = String(email).split('@')[0] || '';
-        const name = localPart
-          .split(/[._-]+/)
-          .filter(Boolean)
-          .map(s => s.charAt(0).toUpperCase() + s.slice(1))
-          .join(' ') || email;
+    try {
+      const inviteResult = await profileService.inviteUser(email, role, user);
 
-        // Usar signUp do Supabase 
-        const temporaryPassword = 'exxata123'; // Senha padrão
-        
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email,
-          password: temporaryPassword,
-          options: {
-            data: {
-              full_name: name,
-              role: role || 'collaborator',
-              invited_by: currentUserRole,
-              invited_at: new Date().toISOString()
-            }
-          }
-        });
-
-        // CRÍTICO: Restaurar sessão original imediatamente
-        await restoreSession(originalSession);
-        console.log('✅ Sessão original restaurada após convite');
-
-        if (authError) {
-        console.error('Erro ao criar usuário no Supabase:', authError);
-        
-        // Fallback para sistema local
-        const newUser = {
-          name,
-          email,
-          role: role || 'collaborator',
-          status: 'Pendente',
-          password: temporaryPassword,
-          invitedAt: new Date().toISOString(),
-          invitedBy: currentUserRole
-        };
-        
-        addUser(newUser);
-        toast.success(`Convite enviado para ${email}! (Sistema local - o usuário receberá instruções por email)`);
-      } else {
-        // Usuário criado no Supabase com sucesso
-        toast.success(`Convite enviado para ${email}! O usuário receberá um e-mail de confirmação.`);
+      if (!inviteResult?.success) {
+        throw new Error('Convite não pôde ser processado.');
       }
 
-        // Enviar email de convite (funciona para ambos os casos)
-        await sendInviteEmail(email, name, role, temporaryPassword);
+      const profile = inviteResult.profile ?? {
+        id: inviteResult.userId,
+        email: inviteResult.email,
+        role,
+        status: 'Pendente',
+        name: email
+      };
 
-        setEmail('');
-        setRole('');
-        onClose();
-      } catch (innerErr) {
-        // Garantir que a sessão seja restaurada mesmo em caso de erro
-        await restoreSession(originalSession);
-        console.error('Erro interno ao criar usuário:', innerErr);
-        toast.error('Não foi possível enviar o convite. Tente novamente.');
-      }
+      addUser({
+        id: profile.id,
+        name: profile.name || email,
+        email: profile.email || email,
+        role: profile.role || role,
+        status: profile.status || 'Pendente',
+        lastActive: profile.lastActive || new Date().toISOString()
+      });
+
+      await sendInviteEmail(
+        inviteResult.email,
+        profile.name || email,
+        profile.role || role,
+        inviteResult.password,
+        inviteResult.inviteLink
+      );
+
+      toast.success(`Convite enviado para ${inviteResult.email}.`);
+
+      setEmail('');
+      setRole('');
+      onClose();
     } catch (err) {
       console.error('Erro ao enviar convite:', err);
-      toast.error('Não foi possível enviar o convite. Tente novamente.');
+      toast.error(err?.message || 'Não foi possível enviar o convite.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   // Função para envio de email de convite
-  const sendInviteEmail = async (email, name, role, password) => {
+  const sendInviteEmail = async (email, name, role, password, inviteLink) => {
     try {
       // Tentar enviar email via Supabase Edge Functions (se configurado)
       const { data, error } = await supabase.functions.invoke('send-invite-email', {
@@ -158,7 +135,8 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
           credentials: {
             email,
             password
-          }
+          },
+          inviteLink
         }
       });
 
@@ -178,7 +156,8 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
       credentials: {
         email,
         password
-      }
+      },
+      inviteLink
     });
 
     // Simular delay de envio
@@ -188,6 +167,35 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
   };
 
   if (!isOpen) return null;
+
+  if (!canInvite) {
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+        <Card className="w-full max-w-md relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-4 right-4 h-8 w-8"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Fechar</span>
+          </Button>
+          <CardHeader>
+            <CardTitle>Convites não disponíveis</CardTitle>
+            <CardDescription>
+              Apenas administradores e gerentes podem convidar novos usuários.
+            </CardDescription>
+          </CardHeader>
+          <CardFooter className="flex justify-end">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Fechar
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
@@ -226,7 +234,7 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">Função na plataforma</Label>
-              <Select onValueChange={setRole} required>
+              <Select value={role} onValueChange={setRole} required>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione o nível de acesso" />
                 </SelectTrigger>
@@ -244,9 +252,9 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
             </Button>
-            <Button type="submit">
+            <Button type="submit" disabled={isSubmitting}>
               <UserPlus className="h-4 w-4 mr-2" />
-              Enviar Convite
+              {isSubmitting ? 'Enviando...' : 'Enviar Convite'}
             </Button>
           </CardFooter>
         </form>

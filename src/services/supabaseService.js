@@ -73,8 +73,7 @@ export const profileService = {
   // Convidar usuário (criar convite)
   async inviteUser(email, role, invitedBy) {
     try {
-      // Primeiro, registrar o usuário via Auth
-      const normalizedEmail = String(email).trim();
+      const normalizedEmail = String(email).trim().toLowerCase();
       const fullName = normalizedEmail
         .split('@')[0]
         .split(/[._-]+/)
@@ -82,26 +81,41 @@ export const profileService = {
         .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
         .join(' ');
 
-      const inviteResult = await inviteUserWithAdminRole(supabase, normalizedEmail, fullName || undefined);
+      const inviteResult = await inviteUserWithAdminRole(supabase, normalizedEmail, {
+        fullName: fullName || undefined,
+        password: 'exxata123',
+        role: role ?? 'collaborator',
+        invitedBy: invitedBy || null,
+        metadata: {
+          role: role ?? 'collaborator'
+        },
+        sendEmail: true
+      });
 
-      const invitedUser = inviteResult?.user ?? null;
-
-      if (invitedUser) {
-        try {
-          await supabase
-            .from('profiles')
-            .update({
-              role: role ?? null,
-              invited_by: invitedBy ?? null,
-              invited_at: new Date().toISOString(),
-            })
-            .eq('id', invitedUser.id);
-        } catch (innerError) {
-          console.warn('Não foi possível sincronizar dados adicionais do convite:', innerError);
-        }
+      if (!inviteResult?.success) {
+        throw new Error('Falha ao criar convite no Supabase');
       }
 
-      return { success: true, user: invitedUser };
+      const profileRecord = inviteResult.profile ?? {
+        id: inviteResult.userId,
+        email: inviteResult.email,
+        name: fullName || normalizedEmail,
+        role: role ?? 'collaborator',
+        status: 'Pendente',
+        invited_by: invitedBy?.id ?? invitedBy ?? null,
+        invited_by_role: invitedBy?.role ?? null,
+        invited_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      return {
+        success: true,
+        userId: inviteResult.userId,
+        email: inviteResult.email,
+        password: inviteResult.password,
+        profile: profileRecord,
+        inviteLink: inviteResult.inviteLink ?? null
+      };
     } catch (error) {
       console.error('Erro ao convidar usuário:', error);
       throw error;
