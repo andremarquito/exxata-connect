@@ -510,6 +510,32 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const signup = async (email, password, metadata = {}) => {
+    try {
+      console.log('🔄 Criando conta para:', email);
+      
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: metadata, // user_metadata (ex.: full_name)
+          emailRedirectTo: `${window.location.origin}/auth/callback`
+        }
+      });
+
+      if (error) {
+        console.error('❌ Erro no cadastro:', error.message);
+        throw error;
+      }
+
+      console.log('✅ Conta criada com sucesso, aguardando confirmação de e-mail');
+      return { success: true, data };
+    } catch (error) {
+      console.error('❌ Erro no cadastro:', error.message);
+      throw error;
+    }
+  };
+
   const protectSession = async () => {
     try {
       setSessionProtected(true);
@@ -543,6 +569,7 @@ export const AuthProvider = ({ children }) => {
     hasPermission,
     resetPassword,
     updatePassword,
+    signup,
     protectSession,
     restoreSession
   };

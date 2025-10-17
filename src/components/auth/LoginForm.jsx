@@ -161,6 +161,25 @@ export function LoginForm() {
             >
               {isLoading ? 'Entrando...' : 'Entrar'}
             </Button>
+
+            <div className="text-center text-sm text-gray-600">
+              Não tem uma conta?{' '}
+              <Link
+                to="/signup"
+                className="text-blue-exxata hover:text-blue-700 font-medium"
+              >
+                Criar conta
+              </Link>
+            </div>
+
+            <div className="text-center text-sm">
+              <Link
+                to="/forgot-password"
+                className="text-blue-exxata hover:text-blue-700"
+              >
+                Esqueceu sua senha?
+              </Link>
+            </div>
           </CardFooter>
         </form>
       </Card>

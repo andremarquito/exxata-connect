@@ -6,6 +6,8 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { ProjectsProvider, useProjects } from '@/contexts/ProjectsContext';
 import { UsersProvider } from '@/contexts/UsersContext';
 import { LoginForm } from '@/components/auth/LoginForm';
+import SignUpForm from '@/pages/SignUp';
+import AuthCallback from '@/pages/AuthCallback';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
 import DashboardNew from '@/pages/DashboardNew';
@@ -60,6 +62,8 @@ const AppContent = () => {
     return (
       <Routes>
         <Route path="/login" element={<LoginForm />} />
+        <Route path="/signup" element={<SignUpForm />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
@@ -133,6 +137,8 @@ const App = () => {
           <Router>
             <Routes>
               <Route path="/login" element={<LoginForm />} />
+              <Route path="/signup" element={<SignUpForm />} />
+              <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route
