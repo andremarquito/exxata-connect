@@ -107,18 +107,18 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
     console.log(' Tentando carregar projetos do Supabase para usuário:', userId);
     
     let data, error;
+    const normalizedRole = (userRole || '').toLowerCase();
+    const roleWithoutSpaces = normalizedRole.replace(/\s+/g, '');
+    const isClient = roleWithoutSpaces === 'cliente' || roleWithoutSpaces === 'client';
+    const isCollaborator = ['colaborador', 'collaborator', 'consultor', 'consultant'].includes(roleWithoutSpaces);
     
     try {
-      // Determinar se o usuário é cliente baseado no role
-      const normalizedRole = (userRole || '').toLowerCase().replace(' ', '');
-      const isClient = normalizedRole === 'cliente' || normalizedRole === 'client';
-      
-      console.log('🔍 Tentando view completa para:', { userId, userRole, normalizedRole, isClient });
+      console.log('🔍 Tentando view completa para:', { userId, userRole, normalizedRole, isClient, isCollaborator });
       
       // Para clientes, sempre usar fallback (view não filtra por membros)
-      if (isClient) {
-        console.log('👤 Cliente detectado, pulando view e usando fallback direto');
-        throw new Error('Cliente - usar fallback');
+      if (isClient || isCollaborator) {
+        console.log('👤 Role baseado em membership detectado, pulando view e usando fallback direto');
+        throw new Error('Role com acesso restrito - usar fallback');
       }
       
       // Para admins/consultores: tentar usar a view completa primeiro
@@ -145,20 +145,18 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
       // Fallback: carregar projects básico COM membros usando estrutura correta
       console.log('📝 Carregando projetos com membros usando estrutura real...');
       
-      const normalizedRole = (userRole || '').toLowerCase();
-      const isClient = normalizedRole === 'cliente' || normalizedRole === 'client';
-      
       let basicResult;
       
-      if (isClient) {
+      if (isClient || isCollaborator) {
         // Para clientes: buscar IDs dos projetos onde o usuário é membro
-        console.log('👤 Usuário cliente detectado, carregando projetos via membership');
+        console.log('👤 Usuário com acesso restrito detectado, carregando projetos via membership');
         
         // Primeiro, obter os IDs dos projetos onde o usuário é membro
+        const normalizedUserId = String(userId);
         const { data: memberships, error: membershipError } = await supabase
           .from('project_members')
           .select('project_id')
-          .eq('user_id', userId);
+          .eq('user_id', normalizedUserId);
         
         if (!memberships || memberships.length === 0) {
           console.log('👤 Usuário não é membro de nenhum projeto');
@@ -169,7 +167,37 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
           
           basicResult = await supabase
             .from('projects')
-            .select('*')
+            .select(`
+              *,
+              project_activities_old:project_activities_old(
+                id,
+                custom_id,
+                name,
+                responsible,
+                start_date,
+                end_date,
+                status,
+                created_at,
+                updated_at
+              ),
+              project_files(
+                id,
+                name,
+                file_path,
+                file_size,
+                mime_type,
+                uploaded_by,
+                created_at
+              ),
+              project_indicators(
+                id,
+                name,
+                value,
+                type,
+                created_at,
+                updated_at
+              )
+            `)
             .in('id', projectIds);
             
           // Carregar membros para cada projeto

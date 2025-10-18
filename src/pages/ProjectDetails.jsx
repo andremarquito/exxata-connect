@@ -911,6 +911,7 @@ export function ProjectDetails() {
   const projectMemberNames = projectMembers.map((member) => member.name).filter(Boolean);
   const [showAddMember, setShowAddMember] = useState(false);
   const [searchMember, setSearchMember] = useState('');
+  const [searchCompany, setSearchCompany] = useState('');
   const [selectedUserId, setSelectedUserId] = useState('');
   // Fechar menu de membros ao clicar fora
   useEffect(() => {
@@ -934,6 +935,11 @@ export function ProjectDetails() {
       const q = searchMember.trim().toLowerCase();
       if (!q) return true;
       return (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q);
+    })
+    .filter(u => {
+      const qCompany = searchCompany.trim().toLowerCase();
+      if (!qCompany) return true;
+      return (u.empresa || '').toLowerCase().includes(qCompany);
     });
   const handleConfirmAddMember = async () => {
     if (!selectedUserId) return;
@@ -943,6 +949,7 @@ export function ProjectDetails() {
       setShowAddMember(false);
       setSelectedUserId('');
       setSearchMember('');
+      setSearchCompany('');
     } catch (error) {
       console.error('Erro ao adicionar membro:', error);
       alert('Erro ao adicionar membro. Tente novamente.');
@@ -1655,6 +1662,13 @@ export function ProjectDetails() {
                     />
                   </div>
                   <div className="space-y-2">
+                    <Input
+                      placeholder="Buscar por empresa"
+                      value={searchCompany}
+                      onChange={(e) => setSearchCompany(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <Select value={selectedUserId} onValueChange={setSelectedUserId}>
                       <SelectTrigger>
                         <SelectValue placeholder={availableUsers.length ? 'Selecione um usuário' : 'Nenhum usuário disponível'} />
@@ -1665,6 +1679,7 @@ export function ProjectDetails() {
                           return (
                             <SelectItem key={uid || u.email} value={uid}>
                               {u.name} <span className="text-slate-500">• {u.email}</span>
+                              {u.empresa && <span className="text-slate-400"> • {u.empresa}</span>}
                             </SelectItem>
                           );
                         })}
