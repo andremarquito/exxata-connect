@@ -11,6 +11,7 @@ const SignUpForm = () => {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
+    empresa: '',
     password: '',
     confirmPassword: ''
   });
@@ -34,8 +35,8 @@ const SignUpForm = () => {
       return;
     }
 
-    if (!formData.email.trim()) {
-      toast.error('E-mail é obrigatório');
+    if (!formData.empresa.trim()) {
+      toast.error('Empresa é obrigatória');
       return;
     }
 
@@ -53,7 +54,8 @@ const SignUpForm = () => {
 
     try {
       const result = await signup(formData.email, formData.password, {
-        full_name: formData.fullName.trim()
+        full_name: formData.fullName.trim(),
+        empresa: formData.empresa.trim()
       });
 
       if (result.success) {
@@ -87,6 +89,19 @@ const SignUpForm = () => {
                 type="text"
                 placeholder="Seu nome completo"
                 value={formData.fullName}
+                onChange={handleChange}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="empresa">Empresa</Label>
+              <Input
+                id="empresa"
+                name="empresa"
+                type="text"
+                placeholder="Nome da empresa"
+                value={formData.empresa}
                 onChange={handleChange}
                 required
               />

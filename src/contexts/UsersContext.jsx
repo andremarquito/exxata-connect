@@ -47,6 +47,7 @@ export function UsersProvider({ children }) {
           status: statusLabel,
           statusLabel,
           statusCode,
+          empresa: profile.empresa,
           lastActive: profile.last_active || profile.updated_at || profile.created_at || new Date().toISOString(),
           supabaseProfile: true,
           invitedAt: profile.invited_at || profile.created_at,
@@ -170,8 +171,40 @@ export function UsersProvider({ children }) {
     return newUser;
   };
 
-  const updateUser = (id, patch) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
+  const updateUser = async (id, patch) => {
+    try {
+      // Verificar se é um usuário do Supabase (não local)
+      const userToUpdate = users.find(u => u.id === id);
+      if (userToUpdate?.supabaseProfile) {
+        console.log(`🔄 Atualizando usuário do Supabase: ${id}`, patch);
+
+        // Chamar a Edge Function para atualizar no Supabase
+        const { data, error } = await supabase.functions.invoke('update-user-profile', {
+          body: {
+            user_id: id,
+            ...patch
+          }
+        });
+
+        if (error) {
+          console.error('❌ Erro ao atualizar usuário no Supabase:', error);
+          throw new Error('Falha ao atualizar usuário no Supabase');
+        }
+
+        if (!data?.success) {
+          throw new Error(data?.error || 'Erro desconhecido ao atualizar usuário');
+        }
+
+        console.log('✅ Usuário atualizado no Supabase com sucesso');
+      }
+
+      // Atualizar estado local (para todos os usuários, incluindo locais)
+      setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)));
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Erro ao atualizar usuário:', error);
+      throw error;
+    }
   };
 
   const deleteUser = async (id) => {

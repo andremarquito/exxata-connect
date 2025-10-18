@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, UserPlus, Mail, User, Shield, MoreVertical, Trash2, Pencil, Download, RotateCcw } from 'lucide-react';
+import { Search, User, Shield, MoreVertical, Trash2, Pencil, Download, RotateCcw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUsers } from '@/contexts/UsersContext';
@@ -32,9 +32,6 @@ export function Team() {
   const { user } = useAuth();
   const { users, isLoading, addUser, updateUser, deleteUser } = useUsers();
   const [searchTerm, setSearchTerm] = useState('');
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState('');
   const [editingMember, setEditingMember] = useState(null);
 
   // Verificar permissões do usuário
@@ -148,26 +145,6 @@ export function Team() {
     }
   };
 
-  const handleInviteMember = (e) => {
-    e.preventDefault();
-    try {
-      const localPart = String(email).split('@')[0] || '';
-      const name = localPart
-        .split(/[._-]+/)
-        .filter(Boolean)
-        .map(s => s.charAt(0).toUpperCase() + s.slice(1))
-        .join(' ') || email;
-      addUser({ name, email, role: role || 'collaborator', status: 'Ativo' });
-      toast.success('Convite registrado e usuário adicionado.');
-      setEmail('');
-      setRole('');
-      setIsInviteModalOpen(false);
-    } catch (err) {
-      console.error(err);
-      toast.error('Não foi possível convidar o usuário.');
-    }
-  };
-
   const handleEditMember = (member) => {
     setEditingMember(member);
   };
@@ -257,12 +234,6 @@ export function Team() {
             >
               <Download className="h-4 w-4 mr-2" />
               Exportar Dados
-            </Button>
-          )}
-          {canManageTeam && (
-            <Button onClick={() => setIsInviteModalOpen(true)}>
-              <UserPlus className="h-4 w-4 mr-2" />
-              Convidar Membro
             </Button>
           )}
           </div>
@@ -398,67 +369,6 @@ export function Team() {
         </CardContent>
       </Card>
 
-      {/* Modal de Convite */}
-      {isInviteModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle>Convidar Membro</CardTitle>
-              <CardDescription>
-                Envie um convite por e-mail para adicionar um novo membro à equipe.
-              </CardDescription>
-            </CardHeader>
-            <form onSubmit={handleInviteMember}>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-mail</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="email@exemplo.com"
-                      className="pl-10"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="role">Função</Label>
-                  <Select value={role} onValueChange={setRole} required>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma função" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {roles.map((r) => (
-                        <SelectItem key={r.value} value={r.value}>
-                          {r.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-              <CardContent className="flex justify-end space-x-3 border-t pt-4">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => setIsInviteModalOpen(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button type="submit">
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  Enviar Convite
-                </Button>
-              </CardContent>
-            </form>
-          </Card>
-        </div>
-      )}
-
       {/* Modal de Edição */}
       {editingMember && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -516,11 +426,16 @@ export function Team() {
               >
                 Cancelar
               </Button>
-              <Button onClick={() => {
+              <Button onClick={async () => {
                 if (!editingMember) return;
-                updateUser(editingMember.id, { role: editingMember.role, status: editingMember.status });
-                toast.success('Membro atualizado com sucesso.');
-                setEditingMember(null);
+                try {
+                  await updateUser(editingMember.id, { role: editingMember.role, status: editingMember.status });
+                  toast.success('Membro atualizado com sucesso.');
+                  setEditingMember(null);
+                } catch (error) {
+                  console.error('Erro ao atualizar membro:', error);
+                  toast.error(`Erro ao atualizar membro: ${error.message}`);
+                }
               }}>Salvar Alterações</Button>
             </CardContent>
           </Card>

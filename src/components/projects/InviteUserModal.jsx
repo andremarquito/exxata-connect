@@ -20,6 +20,7 @@ const roles = [
 
 export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
   const [email, setEmail] = useState('');
+  const [empresa, setEmpresa] = useState('');
   const [role, setRole] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { addUser, getUserByEmail } = useUsers();
@@ -49,7 +50,7 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
       return;
     }
 
-    if (!email || !role) {
+    if (!email || !empresa || !role) {
       toast.error('Por favor, preencha todos os campos obrigatórios.');
       return;
     }
@@ -78,7 +79,7 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
     setIsSubmitting(true);
 
     try {
-      const inviteResult = await profileService.inviteUser(email, role, user);
+      const inviteResult = await profileService.inviteUser(email, role, user, empresa);
 
       if (!inviteResult?.success) {
         throw new Error('Convite não pôde ser processado.');
@@ -97,6 +98,7 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
         name: profile.name || email,
         email: profile.email || email,
         role: profile.role || role,
+        empresa: empresa,
         status: profile.status || 'Pendente',
         lastActive: profile.lastActive || new Date().toISOString()
       });
@@ -112,6 +114,7 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
       toast.success(`Convite enviado para ${inviteResult.email}.`);
 
       setEmail('');
+      setEmpresa('');
       setRole('');
       onClose();
     } catch (err) {
@@ -231,6 +234,17 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
                   required
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="empresa">Empresa</Label>
+              <Input
+                id="empresa"
+                type="text"
+                placeholder="Nome da empresa"
+                value={empresa}
+                onChange={(e) => setEmpresa(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="role">Função na plataforma</Label>

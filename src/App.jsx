@@ -81,7 +81,6 @@ const AppContent = () => {
       <div className="flex-1 flex flex-col">
         {/* Header */}
         <Header 
-          onInviteUser={() => setIsInviteModalOpen(true)} 
           onNewProject={() => setIsNewProjectModalOpen(true)} 
         />
         

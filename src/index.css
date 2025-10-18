@@ -44,7 +44,7 @@
 body {
   color: rgb(var(--foreground-rgb));
   background: var(--off-white);
-  font-family: 'Inter', sans-serif;
+  font-family: 'Manrope', sans-serif;
 }
 
 @layer utilities {

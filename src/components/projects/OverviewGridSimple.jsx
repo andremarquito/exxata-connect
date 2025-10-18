@@ -29,7 +29,7 @@ const CARD_CATALOG = [
   { type: 'billingProgress', label: 'Progresso em Faturamento', icon: BarChart3 },
 ];
 
-export default function OverviewGridSimple({ project, user, canEdit, updateProject, updateProjectBackend }) {
+export default function OverviewGridSimple({ project, user, canEdit, updateProject, updateProjectBackend, teamMembers }) {
   const userRole = (user?.role || '').toLowerCase();
   const isAdmin = userRole === 'admin' || userRole === 'administrador';
   const isManager = userRole === 'manager' || userRole === 'gerente';
@@ -102,6 +102,33 @@ export default function OverviewGridSimple({ project, user, canEdit, updateProje
   const addWidget = async (type) => {
     const id = 'w_' + Math.floor(Date.now() + Math.random()*1000);
     const nextWidgets = [...widgets, { id, type }];
+    const newConfig = { widgets: nextWidgets, layouts: {} };
+
+    // Atualizar estado local imediatamente
+    updateProject(project.id, { overviewConfig: newConfig });
+
+    // Salvar no backend
+    try {
+      await updateProjectBackend(project.id, { overviewConfig: newConfig });
+    } catch (error) {
+      console.error('Erro ao salvar configuração no backend:', error);
+      // Reverter mudança local em caso de erro
+      updateProject(project.id, { overviewConfig: config });
+      alert('Erro ao salvar configuração. Tente novamente.');
+    }
+
+    setShowAdd(false);
+  };
+
+  // Função para adicionar todos os widgets disponíveis de uma vez
+  const addAllWidgets = async () => {
+    if (availableToAdd.length === 0) return;
+    
+    const newWidgets = availableToAdd.map(card => ({
+      id: 'w_' + Math.floor(Date.now() + Math.random()*1000) + '_' + card.type,
+      type: card.type
+    }));
+    const nextWidgets = [...widgets, ...newWidgets];
     const newConfig = { widgets: nextWidgets, layouts: {} };
 
     // Atualizar estado local imediatamente
@@ -267,6 +294,31 @@ export default function OverviewGridSimple({ project, user, canEdit, updateProje
                 <CardDescription>Escolha um card para adicionar à visão geral</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
+                <Button
+                  variant="default"
+                  className="w-full mb-4 bg-exxata-red hover:bg-red-700 text-white"
+                  onClick={() => {
+                    // Adicionar todos os cards disponíveis quando não há nenhum widget ainda
+                    const newWidgets = CARD_CATALOG.map(card => ({
+                      id: 'w_' + Math.floor(Date.now() + Math.random()*1000) + '_' + card.type,
+                      type: card.type
+                    }));
+                    const newConfig = { widgets: newWidgets, layouts: {} };
+
+                    updateProject(project.id, { overviewConfig: newConfig });
+                    try {
+                      updateProjectBackend(project.id, { overviewConfig: newConfig });
+                    } catch (error) {
+                      console.error('Erro ao salvar configuração no backend:', error);
+                      updateProject(project.id, { overviewConfig: config });
+                      alert('Erro ao salvar configuração. Tente novamente.');
+                    }
+                    setShowAdd(false);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Todos ({CARD_CATALOG.length})
+                </Button>
                 {CARD_CATALOG.map((card) => {
                   const Icon = card.icon;
                   return (
@@ -343,7 +395,7 @@ export default function OverviewGridSimple({ project, user, canEdit, updateProje
             className={`${dragOverId === widget.id ? 'ring-2 ring-exxata-red/40 rounded-lg' : ''}`}
             title={isEditing ? 'Arraste para reordenar' : undefined}
           >
-            {renderCard(widget, isEditing, removeWidget, updateProjectBackend, project, canEdit)}
+            {renderWidgetCard(widget, isEditing, removeWidget, updateProjectBackend, project, canEdit, teamMembers)}
           </div>
         ))}
       </div>
@@ -357,6 +409,16 @@ export default function OverviewGridSimple({ project, user, canEdit, updateProje
               <CardDescription>Escolha um card para adicionar à visão geral</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
+              {availableToAdd.length > 0 && (
+                <Button
+                  variant="default"
+                  className="w-full mb-4 bg-exxata-red hover:bg-red-700 text-white"
+                  onClick={addAllWidgets}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Todos ({availableToAdd.length})
+                </Button>
+              )}
               {availableToAdd.map((card) => {
                 const Icon = card.icon;
                 return (
@@ -388,7 +450,7 @@ export default function OverviewGridSimple({ project, user, canEdit, updateProje
 }
 
 // Função para renderizar cada tipo de card
-function renderCard(widget, isEditing, removeWidget, updateProjectBackend, project, canEdit) {
+function renderWidgetCard(widget, isEditing, removeWidget, updateProjectBackend, project, canEdit, teamMembers) {
   const type = widget.type;
   
   const headerActions = isEditing ? (
@@ -545,14 +607,38 @@ function renderCard(widget, isEditing, removeWidget, updateProjectBackend, proje
 
     case 'progress':
       return (
-        <Card className="h-full">
+        <Card className="h-full flex flex-col">
           <CardHeader className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Progresso de Prazo</CardTitle>
             {headerActions}
           </CardHeader>
-          <CardContent className="p-6 pt-0">
-            <div className="text-2xl font-bold">{Number(project.progress || 0)}%</div>
-            <Progress value={Number(project.progress || 0)} className="h-2 mt-2" />
+          <CardContent className="p-6 pt-0 flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col justify-between">
+              {canEdit && (
+                <div className="flex items-center gap-3 mb-4">
+                  <Input 
+                    type="number" 
+                    defaultValue={Number(project.progress || 0)} 
+                    onBlur={(e) => updateProjectBackend(project.id, { progress: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })} 
+                    className="w-24" 
+                  />
+                  <span className="text-sm text-muted-foreground">%</span>
+                </div>
+              )}
+              <div className="space-y-2">
+                <div className="text-2xl font-bold text-center">{Number(project.progress || 0)}%</div>
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-exxata-red transition-all duration-500 ease-in-out"
+                    style={{ width: `${Number(project.progress || 0)}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-xs text-slate-500 mt-1">
+                  <span>0%</span>
+                  <span>100%</span>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       );
@@ -569,9 +655,12 @@ function renderCard(widget, isEditing, removeWidget, updateProjectBackend, proje
               <Input 
                 defaultValue={project.contractValue} 
                 onBlur={(e) => updateProjectBackend(project.id, { contractValue: e.target.value })} 
+                placeholder="Ex.: 1500000.00"
               />
             ) : (
-              <div className="text-2xl font-bold">{project.contractValue}</div>
+              <div className="text-2xl font-bold">
+                {project.contractValue ? `R$ ${Number(project.contractValue).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+              </div>
             )}
             <p className="text-xs text-muted-foreground mt-1">Contrato assinado</p>
           </CardContent>
@@ -592,12 +681,12 @@ function renderCard(widget, isEditing, removeWidget, updateProjectBackend, proje
                 step="0.01"
                 min="0"
                 defaultValue={project.hourlyRate || ''} 
-                onBlur={(e) => updateProject(project.id, { hourlyRate: e.target.value })} 
+                onBlur={(e) => updateProjectBackend(project.id, { hourlyRate: e.target.value })} 
                 placeholder="Ex.: 150.00"
               />
             ) : (
               <div className="text-2xl font-bold">
-                {project.hourlyRate ? `R$ ${Number(project.hourlyRate).toFixed(2).replace('.', ',')}` : '—'}
+                {project.hourlyRate ? `R$ ${Number(project.hourlyRate).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
               </div>
             )}
           </CardContent>
@@ -618,7 +707,7 @@ function renderCard(widget, isEditing, removeWidget, updateProjectBackend, proje
                 step="0.01"
                 min="0"
                 defaultValue={project.disputedAmount || ''} 
-                onBlur={(e) => updateProject(project.id, { disputedAmount: e.target.value })} 
+                onBlur={(e) => updateProjectBackend(project.id, { disputedAmount: e.target.value })} 
                 placeholder="Ex.: 50000.00"
               />
             ) : (
@@ -735,31 +824,45 @@ function renderCard(widget, isEditing, removeWidget, updateProjectBackend, proje
         </Card>
       );
 
-    case 'team':
+    case 'team': {
+      const members = Array.isArray(teamMembers) && teamMembers.length > 0
+        ? teamMembers
+        : (Array.isArray(project.team) ? project.team : []);
+
       return (
         <Card className="h-full">
           <CardHeader className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Equipe do Projeto</CardTitle>
             {headerActions}
           </CardHeader>
-        <CardContent className="p-6 pt-0">
-          {Array.isArray(project.team) && project.team.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {project.team.map((u) => (
-                <Badge key={u.id} variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">
-                  {u.name}
-                </Badge>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Nenhum membro adicionado.</p>
-          )}
-          {canEdit && (
-            <p className="text-xs text-slate-500 mt-2">Gerencie a equipe na aba "Equipe".</p>
-          )}
-        </CardContent>
+          <CardContent className="p-6 pt-0">
+            {members.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {members.map((member) => {
+                  const key = member.id || member.user_id || member.email || member.name;
+                  const name = member.name || member.email || 'Usuário';
+                  const roleLabel = member.role ? ` - ${member.role}` : '';
+                  return (
+                    <Badge
+                      key={key}
+                      variant="outline"
+                      className="bg-slate-50 text-slate-700 border-slate-200"
+                    >
+                      {name}{roleLabel}
+                    </Badge>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhum membro adicionado.</p>
+            )}
+            {canEdit && (
+              <p className="text-xs text-slate-500 mt-2">Gerencie a equipe na aba "Equipe".</p>
+            )}
+          </CardContent>
         </Card>
       );
+    }
 
     case 'contractSummary':
       return (

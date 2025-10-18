@@ -26,21 +26,23 @@ import * as XLSX from 'xlsx';
 const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
   const formatDatasetsForForm = (list) => {
     if (!Array.isArray(list) || !list.length) {
-      return [{ name: '', values: '', color: '#8884d8' }];
+      return [{ name: '', values: [], colors: [], color: '#8884d8' }];
     }
     return list.map(ds => ({
       ...ds,
-      values: Array.isArray(ds.values)
-        ? ds.values.join(', ')
-        : (typeof ds.values === 'number'
-          ? String(ds.values)
-          : (ds.values || '')),
+      values: Array.isArray(ds.values) 
+        ? ds.values.map(v => typeof v === 'string' ? v : String(v))
+        : (typeof ds.values === 'number' 
+          ? [String(ds.values)]
+          : (ds.values || '').split(',').map(v => v.trim())),
+      colors: Array.isArray(ds.colors) ? ds.colors : [],
     }));
   };
 
   const [title, setTitle] = useState(indicator?.title || '');
   const [chartType, setChartType] = useState(indicator?.chart_type || 'bar');
   const [labels, setLabels] = useState(indicator?.labels?.join(', ') || '');
+  const [valueFormat, setValueFormat] = useState(indicator?.options?.valueFormat || 'number');
   const [datasets, setDatasets] = useState(() => formatDatasetsForForm(indicator?.datasets));
   const importInputRef = useRef(null);
 
@@ -48,8 +50,73 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
     setTitle(indicator?.title || '');
     setChartType(indicator?.chart_type || 'bar');
     setLabels(Array.isArray(indicator?.labels) ? indicator.labels.join(', ') : (indicator?.labels || ''));
-    setDatasets(formatDatasetsForForm(indicator?.datasets));
+    setValueFormat(indicator?.options?.valueFormat || 'number');
+    
+    let formattedDatasets = formatDatasetsForForm(indicator?.datasets);
+    
+    // Para gráficos de pizza, garantir que temos valores e cores suficientes para cada rótulo
+    if (indicator?.chart_type === 'pie' && indicator?.labels) {
+      const labelCount = indicator.labels.length;
+      if (formattedDatasets[0]) {
+        // Garantir que values e colors tenham o mesmo tamanho que labels
+        const currentValues = formattedDatasets[0].values || [];
+        const currentColors = formattedDatasets[0].colors || [];
+        
+        formattedDatasets[0].values = [...currentValues];
+        formattedDatasets[0].colors = [...currentColors];
+        
+        // Preencher com valores padrão se necessário
+        while (formattedDatasets[0].values.length < labelCount) {
+          formattedDatasets[0].values.push(0);
+        }
+        while (formattedDatasets[0].colors.length < labelCount) {
+          formattedDatasets[0].colors.push('#8884d8');
+        }
+      }
+    }
+    
+    setDatasets(formattedDatasets);
   }, [indicator?.id]);
+
+  // Atualizar datasets quando labels ou chartType mudam para gráficos de pizza
+  useEffect(() => {
+    if (chartType === 'pie') {
+      const labelArray = labels.split(',').map(l => l.trim()).filter(Boolean);
+      if (labelArray.length > 0) {
+        setDatasets(prevDatasets => {
+          const newDatasets = [...prevDatasets];
+          if (!newDatasets[0]) {
+            newDatasets[0] = { name: '', values: [], colors: [] };
+          }
+          
+          // Garantir que values e colors tenham o mesmo tamanho que labels
+          const currentValues = newDatasets[0].values || [];
+          const currentColors = newDatasets[0].colors || [];
+          
+          newDatasets[0].values = [...currentValues];
+          newDatasets[0].colors = [...currentColors];
+          
+          // Preencher com valores padrão se necessário
+          while (newDatasets[0].values.length < labelArray.length) {
+            newDatasets[0].values.push(0);
+          }
+          while (newDatasets[0].colors.length < labelArray.length) {
+            newDatasets[0].colors.push('#8884d8');
+          }
+          
+          // Remover valores extras se labels foram reduzidos
+          if (newDatasets[0].values.length > labelArray.length) {
+            newDatasets[0].values = newDatasets[0].values.slice(0, labelArray.length);
+          }
+          if (newDatasets[0].colors.length > labelArray.length) {
+            newDatasets[0].colors = newDatasets[0].colors.slice(0, labelArray.length);
+          }
+          
+          return newDatasets;
+        });
+      }
+    }
+  }, [labels, chartType]);
 
   const handleDatasetChange = (index, field, value) => {
     const newDatasets = [...datasets];
@@ -65,7 +132,10 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
       ...ds,
       values: typeof ds.values === 'string' ? ds.values.split(',').map(v => parseFloat(v.trim()) || 0) : Array.isArray(ds.values) ? ds.values : []
     })),
-    options: indicator?.options || {},
+    options: {
+      ...indicator?.options,
+      valueFormat
+    },
   });
 
   const addDataset = () => {
@@ -87,9 +157,12 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
       const exportRow = {
         'Título': data.title,
         'Tipo de Gráfico': data.chart_type,
+        'Formato de Valor': data.options?.valueFormat === 'currency' ? 'Monetário' : data.options?.valueFormat === 'percentage' ? 'Percentual' : 'Numérico',
         'Rótulos': data.labels.join(', '),
         'Conjunto de Dados': data.datasets.map(ds => `${ds.name}: ${ds.values.join(', ')}`).join(' | '),
-        'Cores': data.datasets.map(ds => ds.color).join(', '),
+        'Cores': data.chart_type === 'pie' 
+          ? (data.datasets[0]?.colors?.join(', ') || '')
+          : data.datasets.map(ds => ds.color).join(', '),
       };
 
       const wb = XLSX.utils.book_new();
@@ -127,6 +200,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
       const row = rows[0];
       const importedTitle = row['Título'] || row['title'] || '';
       const importedChart = row['Tipo de Gráfico'] || row['chart_type'] || chartType;
+      const importedValueFormat = (row['Formato de Valor'] || row['value_format'] || '').toLowerCase().includes('monetário') ? 'currency' : (row['Formato de Valor'] || row['value_format'] || '').toLowerCase().includes('percentual') ? 'percentage' : 'number';
       const importedLabels = row['Rótulos'] || row['labels'] || '';
       const importedDatasetStr = row['Conjunto de Dados'] || row['datasets'] || '';
       const importedColors = row['Cores'] || row['colors'] || '';
@@ -148,16 +222,28 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
           const valuesArray = valuesStr
             ? valuesStr.split(',').map(v => parseFloat(v.trim()) || 0)
             : [];
-          return {
-            name: name?.trim() || `Série ${index + 1}`,
-            values: valuesArray.join(', '),
-            color: colorParts[index] || '#8884d8',
-          };
+          
+          if (importedChart === 'pie') {
+            // Para pizza, as cores estão no array colorParts diretamente
+            return {
+              name: name?.trim() || `Série ${index + 1}`,
+              values: valuesArray.join(', '),
+              colors: colorParts.length > 0 ? colorParts : undefined,
+            };
+          } else {
+            // Para outros gráficos, cores por dataset
+            return {
+              name: name?.trim() || `Série ${index + 1}`,
+              values: valuesArray.join(', '),
+              color: colorParts[index] || '#8884d8',
+            };
+          }
         });
       }
 
       setTitle(importedTitle);
       setChartType(importedChart);
+      setValueFormat(importedValueFormat);
       setLabels(parsedLabels.join(', '));
       setDatasets(formatDatasetsForForm(parsedDatasets));
     } catch (error) {
@@ -209,27 +295,73 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
         </select>
       </div>
       <div>
+        <label className="block text-sm font-medium mb-1">Formato de Valor</label>
+        <select value={valueFormat} onChange={(e) => setValueFormat(e.target.value)} className="w-full p-2 border rounded">
+          <option value="number">Numérico (1.234,56)</option>
+          <option value="currency">Monetário (R$ 1.234,56)</option>
+          <option value="percentage">Percentual (45,6%)</option>
+        </select>
+      </div>
+      <div>
         <label className="block text-sm font-medium mb-1">Rótulos (separados por vírgula)</label>
         <input value={labels} onChange={(e) => setLabels(e.target.value)} className="w-full p-2 border rounded" placeholder="Ex: Jan, Fev, Mar"/>
       </div>
       
       <div className="space-y-3">
-        <h3 className="font-medium">Conjunto de Dados</h3>
-        {datasets.map((ds, index) => (
-          <div key={index} className="p-3 border rounded space-y-2 relative">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <input value={ds.name} onChange={(e) => handleDatasetChange(index, 'name', e.target.value)} placeholder="Nome da Série" className="p-2 border rounded" />
-              <input value={ds.values} onChange={(e) => handleDatasetChange(index, 'values', e.target.value)} placeholder="Valores (ex: 10,20,30)" className="p-2 border rounded" />
-              <input type="color" value={ds.color} onChange={(e) => handleDatasetChange(index, 'color', e.target.value)} className="p-1 h-10 w-full border rounded" />
-            </div>
-            {datasets.length > 1 && (
-              <button onClick={() => removeDataset(index)} className="absolute top-2 right-2 text-red-500 hover:text-red-700">
-                <Trash2 size={18} />
-              </button>
-            )}
+        <h3 className="font-medium">{chartType === 'pie' ? 'Cores das Fatias' : 'Conjunto de Dados'}</h3>
+        {chartType === 'pie' ? (
+          // Para gráficos de pizza, mostrar valores e cores por rótulo
+          <div className="space-y-2">
+            {labels.split(',').map((label, index) => (
+              <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2 p-3 border rounded">
+                <div className="md:col-span-2">
+                  <span className="text-sm font-medium">{label.trim()}</span>
+                </div>
+                <input 
+                  type="number" 
+                  step="0.01"
+                  placeholder="Valor"
+                  value={datasets[0]?.values?.[index] || ''} 
+                  onChange={(e) => {
+                    const newValues = [...(datasets[0]?.values || [])];
+                    newValues[index] = parseFloat(e.target.value) || 0;
+                    handleDatasetChange(0, 'values', newValues);
+                  }}
+                  className="p-2 border rounded text-sm"
+                />
+                <input 
+                  type="color" 
+                  value={datasets[0]?.colors?.[index] || '#8884d8'} 
+                  onChange={(e) => {
+                    const newColors = [...(datasets[0]?.colors || [])];
+                    newColors[index] = e.target.value;
+                    handleDatasetChange(0, 'colors', newColors);
+                  }}
+                  className="p-1 h-10 w-full border rounded"
+                />
+              </div>
+            ))}
           </div>
-        ))}
-        <Button variant="outline" size="sm" onClick={addDataset}>Adicionar Série</Button>
+        ) : (
+          // Para outros tipos de gráfico, mostrar datasets normais
+          <>
+            {datasets.map((ds, index) => (
+              <div key={index} className="p-3 border rounded space-y-2 relative">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <input value={ds.name} onChange={(e) => handleDatasetChange(index, 'name', e.target.value)} placeholder="Nome da Série" className="p-2 border rounded" />
+                  <input value={ds.values} onChange={(e) => handleDatasetChange(index, 'values', e.target.value)} placeholder="Valores (ex: 10,20,30)" className="p-2 border rounded" />
+                  <input type="color" value={ds.color} onChange={(e) => handleDatasetChange(index, 'color', e.target.value)} className="p-1 h-10 w-full border rounded" />
+                </div>
+                {datasets.length > 1 && (
+                  <button onClick={() => removeDataset(index)} className="absolute top-2 right-2 text-red-500 hover:text-red-700">
+                    <Trash2 size={18} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <Button variant="outline" size="sm" onClick={addDataset}>Adicionar Série</Button>
+          </>
+        )}
       </div>
 
       <div className="flex justify-end gap-2 pt-4">
@@ -261,6 +393,8 @@ export function ProjectDetails() {
   // Filtros do Gantt
   const [activityStatus, setActivityStatus] = useState('all');
   const [activityUser, setActivityUser] = useState('all');
+  const [activityStartDate, setActivityStartDate] = useState('');
+  const [activityEndDate, setActivityEndDate] = useState('');
 
   // Estados para ordenação e edição da tabela
   const [sortField, setSortField] = useState('title');
@@ -301,6 +435,7 @@ export function ProjectDetails() {
     addPanoramaItem,
     updatePanoramaItem,
     deletePanoramaItem,
+    addProjectFile,
   } = useProjects();
   const project = getProjectById(projectId);
   const userRole = (user?.role || '').toLowerCase();
@@ -358,10 +493,29 @@ export function ProjectDetails() {
     });
   };
 
-  const filteredActivities = activities.filter(a =>
-    (activityStatus === 'all' || a.status === activityStatus) &&
-    (activityUser === 'all' || a.assignedTo === activityUser)
-  );
+  const filteredActivities = activities.filter(a => {
+    // Filtro de status
+    if (activityStatus !== 'all' && a.status !== activityStatus) return false;
+    
+    // Filtro de usuário
+    if (activityUser !== 'all' && a.assignedTo !== activityUser) return false;
+    
+    // Filtro de data de início
+    if (activityStartDate) {
+      const filterStartDate = new Date(activityStartDate);
+      const activityStartDateValue = new Date(a.startDate);
+      if (activityStartDateValue < filterStartDate) return false;
+    }
+    
+    // Filtro de data de fim
+    if (activityEndDate) {
+      const filterEndDate = new Date(activityEndDate);
+      const activityEndDateValue = new Date(a.endDate);
+      if (activityEndDateValue > filterEndDate) return false;
+    }
+    
+    return true;
+  });
 
   const sortedActivities = sortActivities(filteredActivities, sortField, sortDirection);
 
@@ -438,11 +592,16 @@ export function ProjectDetails() {
   };
 
   const dayMs = 86400000;
-  const parseDate = (d) => new Date(d);
-  let defaultStart = new Date(project.startDate);
-  if (isNaN(defaultStart)) defaultStart = new Date();
-  let defaultEnd = new Date(project.endDate);
-  if (isNaN(defaultEnd)) defaultEnd = addDays(defaultStart, 30);
+  const parseDate = (d) => {
+    const parsed = d ? new Date(d) : new Date();
+    return isNaN(parsed) ? new Date() : parsed;
+  };
+
+  let defaultStart = parseDate(project?.startDate);
+  let defaultEnd = parseDate(project?.endDate);
+  if (!project?.endDate || isNaN(defaultEnd)) {
+    defaultEnd = addDays(defaultStart, 30);
+  }
   const minStart = sortedActivities.length
     ? new Date(Math.min(...sortedActivities.map(a => parseDate(a.startDate))))
     : defaultStart;
@@ -686,14 +845,16 @@ export function ProjectDetails() {
   };
   const triggerDownload = async (file) => {
     try {
+      // Validar se o arquivo tem storagePath válido
+      if (!file?.storagePath || typeof file.storagePath !== 'string' || file.storagePath.trim() === '') {
+        alert('Este arquivo não possui um caminho válido para download.');
+        return;
+      }
+
       const url = await getFileUrl(file.storagePath);
       if (url) {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = file.original_name || file.name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        // Abrir o arquivo em uma nova aba
+        window.open(url, '_blank');
       } else {
         alert('Erro ao obter URL do arquivo para download.');
       }
@@ -872,6 +1033,55 @@ export function ProjectDetails() {
     } catch (error) {
       console.error('Erro ao exportar indicadores:', error);
       alert('Erro ao exportar indicadores. Tente novamente.');
+    }
+  };
+
+  // Funções para export/import de atividades
+  const handleExportActivities = () => {
+    try {
+      const activities = sortedActivities || [];
+      if (activities.length === 0) {
+        alert('Não há atividades para exportar.');
+        return;
+      }
+
+      // Preparar dados para Excel
+      const exportData = activities.map(activity => ({
+        'ID': getActivityDisplayId(activity),
+        'Atividade': activity.title,
+        'Responsável': activity.assignedTo,
+        'Data de Início': new Date(activity.startDate).toLocaleDateString('pt-BR'),
+        'Data de Fim': new Date(activity.endDate).toLocaleDateString('pt-BR'),
+        'Status': activity.status,
+        'Criado em': new Date(activity.created_at).toLocaleString('pt-BR'),
+        'Atualizado em': new Date(activity.updated_at).toLocaleString('pt-BR'),
+      }));
+
+      // Criar workbook
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+
+      // Auto-ajustar largura das colunas
+      const colWidths = [
+        { wch: 10 }, // ID
+        { wch: 40 }, // Atividade
+        { wch: 20 }, // Responsável
+        { wch: 15 }, // Data de Início
+        { wch: 15 }, // Data de Fim
+        { wch: 15 }, // Status
+        { wch: 20 }, // Criado em
+        { wch: 20 }, // Atualizado em
+      ];
+      ws['!cols'] = colWidths;
+
+      XLSX.utils.book_append_sheet(wb, ws, 'Atividades');
+      
+      // Download do arquivo
+      const fileName = `atividades_${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    } catch (error) {
+      console.error('Erro ao exportar atividades:', error);
+      alert('Erro ao exportar atividades. Tente novamente.');
     }
   };
 
@@ -1174,6 +1384,7 @@ export function ProjectDetails() {
             canEdit={canEdit} 
             updateProject={updateProject}
             updateProjectBackend={updateProjectBackend}
+            teamMembers={loadedProjectMembers.length > 0 ? loadedProjectMembers : projectMembers}
           />
         </TabsContent>
 
@@ -1534,7 +1745,7 @@ export function ProjectDetails() {
                   <CardTitle>Atividades</CardTitle>
                   <CardDescription>Gerencie as atividades, responsáveis, prazos e visualize o Gantt.</CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Select value={activityUser} onValueChange={setActivityUser}>
                     <SelectTrigger className="w-[180px]"><SelectValue placeholder="Usuário" /></SelectTrigger>
                     <SelectContent>
@@ -1553,12 +1764,36 @@ export function ProjectDetails() {
                       <SelectItem value="Concluída">Concluída</SelectItem>
                     </SelectContent>
                   </Select>
-                  {canAddActivities && (
-                    <Button size="sm" className="gap-1" onClick={() => setShowAddActivity(v => !v)}>
-                      <FilePlus2 className="h-4 w-4" />
-                      Nova Atividade
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-slate-600">Data Início:</label>
+                    <Input
+                      type="date"
+                      value={activityStartDate}
+                      onChange={(e) => setActivityStartDate(e.target.value)}
+                      className="w-[140px] h-9"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium text-slate-600">Data Fim:</label>
+                    <Input
+                      type="date"
+                      value={activityEndDate}
+                      onChange={(e) => setActivityEndDate(e.target.value)}
+                      className="w-[140px] h-9"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button onClick={handleExportActivities} variant="outline" size="sm" className="gap-1">
+                      <Download className="h-4 w-4" />
+                      Exportar Excel
                     </Button>
-                  )}
+                    {canAddActivities && (
+                      <Button size="sm" className="gap-1" onClick={() => setShowAddActivity(v => !v)}>
+                        <FilePlus2 className="h-4 w-4" />
+                        Nova Atividade
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
             </CardHeader>

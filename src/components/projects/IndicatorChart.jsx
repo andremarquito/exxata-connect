@@ -1,13 +1,37 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 
-const CustomTooltip = ({ active, payload, label }) => {
+const formatValue = (value, format) => {
+  if (typeof value !== 'number') return value;
+  
+  if (format === 'currency') {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
+  } else if (format === 'percentage') {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'percent',
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    }).format(value / 100);
+  } else {
+    return new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    }).format(value);
+  }
+};
+
+const CustomTooltip = ({ active, payload, label, valueFormat }) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white p-2 border border-gray-200 rounded shadow-lg">
         <p className="label font-bold">{`${label}`}</p>
         {payload.map((p, index) => (
-          <p key={index} style={{ color: p.color }}>{`${p.name}: ${p.value}`}</p>
+          <p key={index} style={{ color: p.color }}>{`${p.name}: ${formatValue(p.value, valueFormat)}`}</p>
         ))}
       </div>
     );
@@ -16,8 +40,9 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 const IndicatorChart = ({ indicator }) => {
-  const { chart_type, labels, datasets } = indicator;
+  const { chart_type, labels, datasets, options } = indicator;
   const type = chart_type; // Mantém a variável 'type' para compatibilidade interna do componente
+  const valueFormat = options?.valueFormat || 'number';
 
   const data = labels.map((label, index) => {
     const dataEntry = { name: label };
@@ -35,7 +60,7 @@ const IndicatorChart = ({ indicator }) => {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis type="number" />
             <YAxis dataKey="name" type="category" width={80} />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip valueFormat={valueFormat} />} />
             <Legend />
             {datasets.map((dataset, index) => (
               <Bar key={index} dataKey={dataset.name} fill={dataset.color || '#8884d8'}>
@@ -56,7 +81,7 @@ const IndicatorChart = ({ indicator }) => {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="name" />
             <YAxis />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip valueFormat={valueFormat} />} />
             <Legend />
             {datasets.map((dataset, index) => (
               <Bar key={index} dataKey={dataset.name} fill={dataset.color || '#8884d8'}>
@@ -77,7 +102,7 @@ const IndicatorChart = ({ indicator }) => {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="name" />
             <YAxis />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip valueFormat={valueFormat} />} />
             <Legend />
             {datasets.map((dataset, index) => (
               <Line key={index} type="monotone" dataKey={dataset.name} stroke={dataset.color || '#8884d8'} activeDot={{ r: 8 }} />
@@ -93,7 +118,10 @@ const IndicatorChart = ({ indicator }) => {
       name: label,
       value: datasets[0]?.values[index] || 0,
     }));
-    const COLORS = ['#d51d07', '#09182b', '#0ea5e9', '#f59e0b', '#10b981', '#6366f1'];
+
+    // Usar cores individuais por fatia, ou cores padrão cíclicas
+    const defaultColors = ['#d51d07', '#09182b', '#0ea5e9', '#f59e0b', '#10b981', '#6366f1'];
+    const pieColors = datasets[0]?.colors || defaultColors;
 
     return (
       <div style={{ width: '100%', height: 300 }}>
@@ -110,10 +138,10 @@ const IndicatorChart = ({ indicator }) => {
               dataKey="value"
             >
               {pieData.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                <Cell key={`cell-${index}`} fill={pieColors[index] || defaultColors[index % defaultColors.length]} />
               ))}
             </Pie>
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip valueFormat={valueFormat} />} />
             <Legend />
           </PieChart>
         </ResponsiveContainer>

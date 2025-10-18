@@ -121,6 +121,7 @@ const getUserProfile = async (supabaseUser) => {
       name,
       email: supabaseUser.email,
       role,
+      empresa: profile?.empresa,
       permissions: getPermissionsByRole(role),
       supabaseUser // Manter referência ao usuário do Supabase
     };
@@ -518,7 +519,7 @@ export const AuthProvider = ({ children }) => {
         email,
         password,
         options: {
-          data: metadata, // user_metadata (ex.: full_name)
+          data: metadata, // user_metadata (ex.: full_name, empresa)
           emailRedirectTo: `${window.location.origin}/auth/callback`
         }
       });
@@ -526,6 +527,31 @@ export const AuthProvider = ({ children }) => {
       if (error) {
         console.error('❌ Erro no cadastro:', error.message);
         throw error;
+      }
+
+      // Se o cadastro foi bem-sucedido e temos um usuário criado, criar perfil na tabela profiles
+      if (data.user && data.user.id) {
+        try {
+          const { error: profileError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: data.user.id,
+              email: email.trim().toLowerCase(),
+              name: metadata.full_name || email.split('@')[0],
+              empresa: metadata.empresa,
+              role: 'cliente', // padrão para novos cadastros
+              status: data.user.email_confirmed_at ? 'Ativo' : 'Pendente',
+              invited_at: new Date().toISOString(),
+            });
+
+          if (profileError) {
+            console.warn('⚠️ Perfil criado, mas erro ao salvar dados adicionais:', profileError.message);
+          } else {
+            console.log('✅ Perfil criado com sucesso na tabela profiles');
+          }
+        } catch (profileError) {
+          console.warn('⚠️ Erro ao criar perfil adicional:', profileError.message);
+        }
       }
 
       console.log('✅ Conta criada com sucesso, aguardando confirmação de e-mail');

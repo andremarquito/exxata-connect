@@ -71,7 +71,7 @@ export const profileService = {
   },
 
   // Convidar usuário (criar convite)
-  async inviteUser(email, role, invitedBy) {
+  async inviteUser(email, role, invitedBy, empresa) {
     try {
       const normalizedEmail = String(email).trim().toLowerCase();
       const fullName = normalizedEmail
@@ -85,6 +85,7 @@ export const profileService = {
         fullName: fullName || undefined,
         password: 'exxata123',
         role: role ?? 'collaborator',
+        empresa: empresa,
         invitedBy: invitedBy || null,
         metadata: {
           role: role ?? 'collaborator'
@@ -101,6 +102,7 @@ export const profileService = {
         email: inviteResult.email,
         name: fullName || normalizedEmail,
         role: role ?? 'collaborator',
+        empresa: empresa,
         status: 'Pendente',
         invited_by: invitedBy?.id ?? invitedBy ?? null,
         invited_by_role: invitedBy?.role ?? null,
@@ -383,6 +385,28 @@ export const projectService = {
       console.error('Erro ao remover membro:', error);
       throw error;
     }
+  },
+
+  // Deletar projeto completamente
+  async deleteProject(projectId) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
+      console.log('🗑️ Deletando projeto no Supabase:', projectId);
+
+      const { error } = await supabase
+        .from('projects')
+        .delete()
+        .eq('id', projectId);
+
+      if (error) throw error;
+
+      return { success: true };
+    } catch (error) {
+      console.error('Erro ao deletar projeto:', error);
+      throw error;
+    }
   }
 };
 
@@ -607,6 +631,11 @@ export const fileService = {
   // Obter URL do arquivo (usando URL pública já que o bucket é público)
   async getFileUrl(storagePath) {
     try {
+      // Validar se storagePath é uma string válida
+      if (!storagePath || typeof storagePath !== 'string' || storagePath.trim() === '') {
+        throw new Error('Caminho do arquivo inválido ou não fornecido');
+      }
+
       // Como o bucket está público, usar URL pública diretamente
       const { data } = supabase.storage
         .from('project-files')

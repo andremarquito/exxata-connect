@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Bell, LogOut, Settings } from 'lucide-react';
 
-export function Header({ onInviteUser, onNewProject }) {
+export function Header({ onNewProject }) {
   const { user, logout } = useAuth();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const navigate = useNavigate();
@@ -15,9 +15,6 @@ export function Header({ onInviteUser, onNewProject }) {
   const isCollaborator = (userRole === 'collaborator' || userRole === 'colaborador' || userRole === 'consultor' || userRole === 'consultant');
   const isManager = (userRole === 'manager' || userRole === 'gerente');
   const isAdmin = (userRole === 'admin' || userRole === 'administrador');
-  
-  // Determinar se pode convidar
-  const canInvite = isAdmin || isManager || isCollaborator;
 
   const handleNewProject = () => {
     if (isClient) {
@@ -25,14 +22,6 @@ export function Header({ onInviteUser, onNewProject }) {
       return;
     }
     onNewProject();
-  };
-
-  const handleInviteUser = () => {
-    if (!canInvite) {
-      alert('Você não possui permissão para convidar colaboradores. Entre em contato com o administrador.');
-      return;
-    }
-    onInviteUser();
   };
 
   const handleLogout = () => {
@@ -66,19 +55,6 @@ export function Header({ onInviteUser, onNewProject }) {
             <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
               <Bell className="h-5 w-5" />
             </button>
-
-            {/* Convidar Colaborador */}
-            <Button 
-              onClick={handleInviteUser}
-              className={`rounded-lg px-4 py-2 ${
-                !canInvite
-                  ? 'bg-slate-400 hover:bg-slate-500 text-white cursor-not-allowed'
-                  : 'bg-exxata-red hover:bg-red-700 text-white'
-              }`}
-              title={!canInvite ? 'Sem permissão para convidar colaboradores' : 'Convidar colaborador para a plataforma'}
-            >
-              Convidar Colaborador
-            </Button>
 
             {/* Novo Projeto */}
             <Button 

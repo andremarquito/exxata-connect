@@ -4,7 +4,7 @@ import { Input } from '../ui/input.jsx'
 import { Label } from '../ui/label.jsx'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card.jsx'
 import { useAuth } from '../../contexts/AuthContext.jsx'
-import { Building2, Lock, Mail, Eye, EyeOff } from 'lucide-react'
+import { Lock, Mail, Eye, EyeOff } from 'lucide-react'
 
 export const LoginForm = () => {
   const [email, setEmail] = useState('')
@@ -36,7 +36,11 @@ export const LoginForm = () => {
         {/* Logo e Título */}
         <div className="text-center text-white">
           <div className="flex items-center justify-center mb-4">
-            <Building2 className="h-12 w-12 text-exxata-red" />
+            <img
+              src="/Assinatura-de-Marca---Exxata_01.png"
+              alt="Exxata"
+              className="h-16 object-contain"
+            />
           </div>
           <h1 className="text-3xl font-bold mb-2">
             Exxata <span className="text-exxata-red">Connect</span>
@@ -103,7 +107,7 @@ export const LoginForm = () => {
 
               <Button
                 type="submit"
-                className="w-full bg-exxata-red hover:bg-dark-red text-white"
+                className="w-full bg-exxata-red hover:bg-dark-red !text-[#eeeeee] font-semibold"
                 disabled={isLoading}
               >
                 {isLoading ? 'Entrando...' : 'Entrar'}

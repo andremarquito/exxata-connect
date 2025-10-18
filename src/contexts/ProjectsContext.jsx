@@ -636,8 +636,22 @@ export function ProjectsProvider({ children }) {
     }
   };
 
-  const deleteProject = (id) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
+  const deleteProject = async (id) => {
+    try {
+      const { projectService } = await import('@/services/supabaseService');
+
+      console.log('🗑️ Removendo projeto do Supabase:', id);
+      await projectService.deleteProject(id);
+
+      // Atualiza store local para remoção imediata
+      setProjects(prev => prev.filter(p => String(p.id) !== String(id)));
+
+      // Recarrega lista para garantir consistência (membros, relacionamentos, etc.)
+      await refreshProjects();
+    } catch (error) {
+      console.error('Erro ao remover projeto:', error);
+      throw error;
+    }
   };
 
   const getProjectById = (id) => projects.find(p => p.id === Number(id));

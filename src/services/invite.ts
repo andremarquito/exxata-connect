@@ -6,6 +6,7 @@ export interface InviteUserOptions {
   metadata?: Record<string, unknown>;
   sendEmail?: boolean;
   role?: string;
+  empresa?: string;
   invitedBy?: {
     id?: string;
     email?: string;
@@ -31,21 +32,24 @@ export async function inviteUser(
     metadata,
     sendEmail,
     role,
+    empresa,
     invitedBy
   }: InviteUserOptions = {}
 ): Promise<InviteUserResponse> {
   const normalizedEmail = email.trim().toLowerCase();
   const defaultPassword = password ?? 'exxata123';
 
+  // Use Edge Function instead of direct database operations
   const { data, error } = await supabase.functions.invoke('invite-user', {
     body: {
       email: normalizedEmail,
       fullName,
       password: defaultPassword,
-      role,
+      role: role ?? 'cliente',
+      empresa,
       invitedBy,
       metadata,
-      sendEmail
+      sendEmail: sendEmail ?? true
     }
   });
 
