@@ -163,7 +163,7 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
           basicResult = { data: [], error: null };
         } else {
           // Obter os projetos pelos IDs encontrados
-          const projectIds = memberships.map(m => m.project_id);
+          const projectIds = memberships.map(m => String(m.project_id));
           
           basicResult = await supabase
             .from('projects')
@@ -191,9 +191,11 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
               ),
               project_indicators(
                 id,
-                name,
-                value,
-                type,
+                title,
+                chart_type,
+                datasets,
+                labels,
+                options,
                 created_at,
                 updated_at
               )
@@ -250,9 +252,11 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
             ),
             project_indicators(
               id,
-              name,
-              value,
-              type,
+              title,
+              chart_type,
+              datasets,
+              labels,
+              options,
               created_at,
               updated_at
             )
@@ -381,11 +385,11 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
       })),
       indicators: (project.project_indicators || []).map(ind => ({
         id: ind.id,
-        title: ind.name,
-        type: ind.type || 'bar',
-        labels: [],
-        datasets: [],
-        notes: ind.value || '',
+        title: ind.title,
+        type: ind.chart_type || 'bar',
+        labels: ind.labels || [],
+        datasets: ind.datasets || [],
+        notes: '',
         createdBy: project.created_by,
         createdAt: ind.created_at,
       })),
