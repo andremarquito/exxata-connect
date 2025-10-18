@@ -436,6 +436,7 @@ export function ProjectDetails() {
     updatePanoramaItem,
     deletePanoramaItem,
     addProjectFile,
+    duplicateProjectActivity,
   } = useProjects();
   const project = getProjectById(projectId);
   const userRole = (user?.role || '').toLowerCase();
@@ -822,6 +823,7 @@ export function ProjectDetails() {
   // Arquivos: helpers e permissões
   const FILES_PAGE_SIZE = 10;
   const isClientUser = ((user?.role || '').toLowerCase() === 'client' || (user?.role || '').toLowerCase() === 'cliente');
+  const canManageIndicators = !isClientUser && canEdit;
   const canUploadTo = (source) => !isClientUser || source === 'client';
   const canDeleteFiles = isAdmin || isManager || hasPermission('delete_projects') || hasPermission('edit_projects');
 
@@ -1093,6 +1095,7 @@ export function ProjectDetails() {
   };
 
   const handleImportIndicators = () => {
+    if (!canManageIndicators) return;
     document.getElementById('indicator-import-input').click();
   };
 
@@ -1361,10 +1364,12 @@ export function ProjectDetails() {
 
           {activeTab === 'indicators' && (
             <div className="flex gap-2">
-              <Button onClick={() => { setEditingIndicator(null); setShowIndicatorModal(true); }} size="sm" className="gap-1">
-                <Plus className="h-4 w-4" />
-                Incluir gráfico
-              </Button>
+              {canEdit && (
+                <Button onClick={() => { setEditingIndicator(null); setShowIndicatorModal(true); }} size="sm" className="gap-1">
+                  <Plus className="h-4 w-4" />
+                  Incluir gráfico
+                </Button>
+              )}
               <Button onClick={handleExportIndicators} variant="outline" size="sm" className="gap-1">
                 <Download className="h-4 w-4" />
                 Exportar Excel
@@ -1399,31 +1404,35 @@ export function ProjectDetails() {
         <TabsContent value="indicators" className="space-y-4">
           {project?.project_indicators && project.project_indicators.length > 0 ? (
             <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-              <Card className="border-dashed border-2 flex items-center justify-center min-h-[220px]">
-                <CardContent className="flex flex-col items-center justify-center gap-3 text-center">
-                  <span className="text-sm text-muted-foreground">Crie um novo indicador diretamente por aqui.</span>
-                  <Button onClick={() => { setEditingIndicator(null); setShowIndicatorModal(true); }} className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Adicionar indicador
-                  </Button>
-                </CardContent>
-              </Card>
+              {canEdit && (
+                <Card className="border-dashed border-2 flex items-center justify-center min-h-[220px]">
+                  <CardContent className="flex flex-col items-center justify-center gap-3 text-center">
+                    <span className="text-sm text-muted-foreground">Crie um novo indicador diretamente por aqui.</span>
+                    <Button onClick={() => { setEditingIndicator(null); setShowIndicatorModal(true); }} className="gap-2">
+                      <Plus className="h-4 w-4" />
+                      Adicionar indicador
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
               {project.project_indicators.map(indicator => (
                 <Card key={indicator.id}>
                   <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>{indicator.title}</CardTitle>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => { setEditingIndicator(indicator); setShowIndicatorModal(true); }}>
-                        <Edit3 className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => {
-                        if (window.confirm('Tem certeza que deseja deletar este indicador?')) {
-                          deleteProjectIndicator(project.id, indicator.id);
-                        }
-                      }} className="text-red-500 hover:text-red-600">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {canEdit && (
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => { setEditingIndicator(indicator); setShowIndicatorModal(true); }}>
+                          <Edit3 className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          if (window.confirm('Tem certeza que deseja deletar este indicador?')) {
+                            deleteProjectIndicator(project.id, indicator.id);
+                          }
+                        }} className="text-red-500 hover:text-red-600">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </CardHeader>
                   <CardContent>
                     <IndicatorChart indicator={indicator} />
@@ -1434,18 +1443,22 @@ export function ProjectDetails() {
           ) : (
             <div className="text-center py-12 text-gray-500">
               <p>Nenhum indicador cadastrado para este projeto.</p>
-              <p className="text-sm mt-2">Clique em "Incluir gráfico" para adicionar o primeiro indicador.</p>
-              <Button
-                className="mt-6 gap-2"
-                onClick={() => {
-                  setEditingIndicator(null);
-                  setShowIndicatorModal(true);
-                }}
-                size="sm"
-              >
-                <Plus className="h-4 w-4" />
-                Incluir gráfico
-              </Button>
+              {canEdit && (
+                <>
+                  <p className="text-sm mt-2">Clique em "Incluir gráfico" para adicionar o primeiro indicador.</p>
+                  <Button
+                    className="mt-6 gap-2"
+                    onClick={() => {
+                      setEditingIndicator(null);
+                      setShowIndicatorModal(true);
+                    }}
+                    size="sm"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Incluir gráfico
+                  </Button>
+                </>
+              )}
             </div>
           )}
 

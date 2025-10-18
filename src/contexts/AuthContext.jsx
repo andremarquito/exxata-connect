@@ -44,8 +44,7 @@ const getPermissionsByRole = (role) => {
     case 'consultor':
     case 'consultant':
       return [
-        'view_projects',
-        'edit_projects'
+        'view_projects'
       ];
     case 'client':
     case 'cliente':

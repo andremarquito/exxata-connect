@@ -13,11 +13,12 @@ export function Header({ onNewProject }) {
   const userRole = (user?.role || '').toLowerCase();
   const isClient = (userRole === 'client' || userRole === 'cliente');
   const isCollaborator = (userRole === 'collaborator' || userRole === 'colaborador' || userRole === 'consultor' || userRole === 'consultant');
+  const isRestricted = isClient || isCollaborator;
   const isManager = (userRole === 'manager' || userRole === 'gerente');
   const isAdmin = (userRole === 'admin' || userRole === 'administrador');
 
   const handleNewProject = () => {
-    if (isClient) {
+    if (isRestricted) {
       alert('Você não possui permissão para criar novos projetos. Entre em contato com o administrador.');
       return;
     }
@@ -60,11 +61,11 @@ export function Header({ onNewProject }) {
             <Button 
               onClick={handleNewProject}
               className={`rounded-lg px-4 py-2 ${
-                isClient
+                isRestricted
                   ? 'bg-slate-400 hover:bg-slate-500 text-white cursor-not-allowed'
                   : 'bg-exxata-red hover:bg-red-700 text-white'
               }`}
-              title={isClient ? 'Sem permissão para criar projetos' : 'Criar novo projeto'}
+              title={isRestricted ? 'Sem permissão para criar projetos' : 'Criar novo projeto'}
             >
               Novo Projeto
             </Button>

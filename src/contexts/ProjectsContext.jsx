@@ -112,120 +112,31 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
     const isClient = roleWithoutSpaces === 'cliente' || roleWithoutSpaces === 'client';
     const isCollaborator = ['colaborador', 'collaborator', 'consultor', 'consultant'].includes(roleWithoutSpaces);
     
-    try {
-      console.log('🔍 Tentando view completa para:', { userId, userRole, normalizedRole, isClient, isCollaborator });
+    console.log('🔍 Carregando projetos para:', { userId, userRole, normalizedRole, isClient, isCollaborator });
+    
+    // Estratégia unificada: sempre usar consultas diretas que funcionam com RLS
+    console.log('📝 Carregando projetos usando consultas diretas com RLS...');
+    
+    let basicResult;
+    
+    if (isClient || isCollaborator) {
+      // Para clientes e colaboradores: buscar projetos via membership
+      console.log('👤 Usuário com acesso restrito detectado, carregando projetos via membership');
       
-      // Para clientes, sempre usar fallback (view não filtra por membros)
-      if (isClient || isCollaborator) {
-        console.log('👤 Role baseado em membership detectado, pulando view e usando fallback direto');
-        throw new Error('Role com acesso restrito - usar fallback');
-      }
+      // Primeiro, obter os IDs dos projetos onde o usuário é membro
+      const normalizedUserId = String(userId);
+      const { data: memberships, error: membershipError } = await supabase
+        .from('project_members')
+        .select('project_id')
+        .eq('user_id', normalizedUserId);
       
-      // Para admins/consultores: tentar usar a view completa primeiro
-      const viewResult = await supabase
-        .from('v_projects_complete')
-        .select('*')
-        .eq('created_by', userId);
-      
-      console.log('🔍 View result:', { data: viewResult.data, error: viewResult.error });
-      
-      if (viewResult.error && viewResult.error.code === 'PGRST116') {
-        console.log(' View não existe, usando carregamento básico...');
-        throw new Error('View não disponível');
-      }
-      
-      data = viewResult.data;
-      error = viewResult.error;
-      console.log(' Usando view completa com membros integrados!');
-      console.log('✅ Usando view completa com membros integrados!');
-      
-    } catch (viewError) {
-      console.log('⚠️ Fallback para carregamento básico:', viewError.message);
-      
-      // Fallback: carregar projects básico COM membros usando estrutura correta
-      console.log('📝 Carregando projetos com membros usando estrutura real...');
-      
-      let basicResult;
-      
-      if (isClient || isCollaborator) {
-        // Para clientes: buscar IDs dos projetos onde o usuário é membro
-        console.log('👤 Usuário com acesso restrito detectado, carregando projetos via membership');
-        
-        // Primeiro, obter os IDs dos projetos onde o usuário é membro
-        const normalizedUserId = String(userId);
-        const { data: memberships, error: membershipError } = await supabase
-          .from('project_members')
-          .select('project_id')
-          .eq('user_id', normalizedUserId);
-        
-        if (!memberships || memberships.length === 0) {
-          console.log('👤 Usuário não é membro de nenhum projeto');
-          basicResult = { data: [], error: null };
-        } else {
-          // Obter os projetos pelos IDs encontrados
-          const projectIds = memberships.map(m => String(m.project_id));
-          
-          basicResult = await supabase
-            .from('projects')
-            .select(`
-              *,
-              project_activities_old:project_activities_old(
-                id,
-                custom_id,
-                name,
-                responsible,
-                start_date,
-                end_date,
-                status,
-                created_at,
-                updated_at
-              ),
-              project_files(
-                id,
-                name,
-                file_path,
-                file_size,
-                mime_type,
-                uploaded_by,
-                created_at
-              ),
-              project_indicators(
-                id,
-                title,
-                chart_type,
-                datasets,
-                labels,
-                options,
-                created_at,
-                updated_at
-              )
-            `)
-            .in('id', projectIds);
-            
-          // Carregar membros para cada projeto
-          if (basicResult.data) {
-            for (const project of basicResult.data) {
-              const membersResult = await supabase
-                .from('project_members')
-                .select(`
-                  *,
-                  profiles (
-                    id,
-                    name,
-                    email,
-                    role,
-                    status
-                  )
-                `)
-                .eq('project_id', project.id.toString());
-                
-              project.members = membersResult.data || [];
-            }
-          }
-        }
+      if (!memberships || memberships.length === 0) {
+        console.log('👤 Usuário não é membro de nenhum projeto');
+        basicResult = { data: [], error: null };
       } else {
-        // Para admins/consultores: buscar projetos criados pelo usuário
-        console.log('👔 Usuário staff detectado, carregando projetos criados');
+        // Obter os projetos pelos IDs encontrados
+        const projectIds = memberships.map(m => String(m.project_id));
+        
         basicResult = await supabase
           .from('projects')
           .select(`
@@ -261,9 +172,9 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
               updated_at
             )
           `)
-          .eq('created_by', userId);
+          .in('id', projectIds);
           
-        // Carregar membros separadamente para cada projeto
+        // Carregar membros para cada projeto
         if (basicResult.data) {
           for (const project of basicResult.data) {
             const membersResult = await supabase
@@ -284,10 +195,70 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
           }
         }
       }
+    } else {
+      // Para admins/managers: buscar projetos criados pelo usuário
+      console.log('👔 Usuário staff detectado, carregando projetos criados');
+      basicResult = await supabase
+        .from('projects')
+        .select(`
+          *,
+          project_activities_old:project_activities_old(
+            id,
+            custom_id,
+            name,
+            responsible,
+            start_date,
+            end_date,
+            status,
+            created_at,
+            updated_at
+          ),
+          project_files(
+            id,
+            name,
+            file_path,
+            file_size,
+            mime_type,
+            uploaded_by,
+            created_at
+          ),
+          project_indicators(
+            id,
+            title,
+            chart_type,
+            datasets,
+            labels,
+            options,
+            created_at,
+            updated_at
+          )
+        `)
+        .eq('created_by', userId);
         
-      data = basicResult.data;
-      error = basicResult.error;
+      // Carregar membros separadamente para cada projeto
+      if (basicResult.data) {
+        for (const project of basicResult.data) {
+          const membersResult = await supabase
+            .from('project_members')
+            .select(`
+              *,
+              profiles (
+                id,
+                name,
+                email,
+                role,
+                status
+              )
+            `)
+            .eq('project_id', project.id.toString());
+            
+          project.members = membersResult.data || [];
+        }
+      }
     }
+      
+    data = basicResult.data;
+    error = basicResult.error;
 
     if (error) {
       console.error('Erro ao carregar projetos do Supabase:', error);
@@ -308,7 +279,7 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
     }
 
     // Converter dados do Supabase para formato local (baseado no schema real)
-    return data.map(project => ({
+    const convertedProjects = data.map(project => ({
       id: project.id,
       name: project.name || 'Projeto sem nome',
       client: project.client || 'Cliente não informado',
@@ -342,7 +313,7 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
           addedAt: member.added_at,
           addedBy: member.added_by
         })) : [] : [],
-        
+
       //  CONDUTAS AGORA CARREGAM VIA VIEW (se disponível)
       conducts: project.conducts ?
         Array.isArray(project.conducts) ? project.conducts.map(conduct => ({
@@ -395,6 +366,8 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
       })),
       source: 'supabase',
     }));
+
+    return convertedProjects;
   } catch (error) {
     console.error('Erro ao carregar projetos:', error);
     return null;
@@ -459,7 +432,15 @@ export function ProjectsProvider({ children }) {
 
     try {
       // Verificar se o user.id é um UUID válido (Supabase) ou ID local
-      const isSupabaseUser = user.supabaseUser && typeof user.id === 'string' && user.id.length > 10;
+      // Usar uma verificação mais simples: se o ID parece ser UUID, tentar Supabase
+      const isSupabaseUser = typeof user.id === 'string' && user.id.length > 10 && user.id.includes('-');
+      console.log('🔍 Verificando tipo de usuário:', {
+        userId: user.id,
+        userIdType: typeof user.id,
+        userIdLength: user.id?.length,
+        hasDashes: user.id?.includes('-'),
+        isSupabaseUser
+      });
 
       if (isSupabaseUser) {
         console.log('🔄 Carregando projetos do Supabase para UUID:', user.id);
@@ -1293,6 +1274,19 @@ export function ProjectsProvider({ children }) {
       const role = (user.role || '').toLowerCase();
       const userId = String(user.id);
       const createdBy = p?.createdBy != null ? String(p.createdBy) : '';
+
+      console.log('🔍 Verificando se usuário pode ver projeto:', {
+        projectId: p?.id,
+        projectName: p?.name,
+        userRole: role,
+        userId,
+        projectCreatedBy: createdBy,
+        projectSource: p?.source,
+        hasMembers: Array.isArray(p?.members),
+        membersCount: Array.isArray(p?.members) ? p.members.length : 0,
+        hasTeam: Array.isArray(p?.team),
+        teamCount: Array.isArray(p?.team) ? p.team.length : 0
+      });
 
       if (role === 'admin' || role === 'administrador' || role === 'manager' || role === 'gerente') return true;
       if (createdBy && createdBy === userId) return true;
