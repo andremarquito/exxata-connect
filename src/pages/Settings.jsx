@@ -59,15 +59,20 @@ export function Settings() {
     setIsSaving(true);
     
     try {
+      // Preparar dados, garantindo que campos vazios sejam null
+      const updateData = {
+        name: name.trim(),
+        empresa: empresa.trim() || null,
+        phone: phone.trim() || null,
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('💾 Atualizando perfil com dados:', updateData);
+
       // Atualizar perfil no Supabase
       const { error } = await supabase
         .from('profiles')
-        .update({
-          name: name.trim(),
-          empresa: empresa.trim(),
-          phone: phone.trim(),
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', user.id);
 
       if (error) throw error;
