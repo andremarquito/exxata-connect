@@ -55,15 +55,35 @@ export function LoginForm() {
       
       // Mensagens de erro mais específicas
       let errorMessage = 'Erro ao fazer login. Tente novamente.';
+      const newErrors = {};
       
       if (error.message) {
         errorMessage = error.message;
+        
+        // Adicionar erro visual nos campos apropriados
+        if (error.message.includes('senha incorret') || 
+            error.message.includes('Invalid login credentials') ||
+            error.message.includes('E-mail ou senha incorretos')) {
+          newErrors.password = 'Senha incorreta';
+          newErrors.email = 'E-mail ou senha incorretos';
+        } else if (error.message.includes('Email not confirmed') || 
+                   error.message.includes('confirme seu e-mail')) {
+          newErrors.email = 'E-mail não confirmado';
+        }
       } else if (error.toString().includes('Invalid login credentials')) {
         errorMessage = 'E-mail ou senha incorretos. Verifique suas credenciais.';
+        newErrors.password = 'Senha incorreta';
+        newErrors.email = 'E-mail ou senha incorretos';
       } else if (error.toString().includes('Email not confirmed')) {
         errorMessage = 'E-mail não confirmado. Verifique sua caixa de entrada.';
+        newErrors.email = 'E-mail não confirmado';
       } else if (error.toString().includes('Too many requests')) {
         errorMessage = 'Muitas tentativas de login. Aguarde alguns minutos e tente novamente.';
+      }
+      
+      // Definir erros visuais nos campos
+      if (Object.keys(newErrors).length > 0) {
+        setErrors(newErrors);
       }
       
       toast.error(errorMessage);

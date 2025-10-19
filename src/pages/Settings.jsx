@@ -1,51 +1,96 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Check, Mail, Bell, Lock, User, CreditCard, Globe, Eye, EyeOff } from 'lucide-react';
+import { Check, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useUsers } from '@/contexts/UsersContext';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 
 export function Settings() {
-  const { user } = useAuth();
-  const { updateUser, getUserByEmail } = useUsers();
-  const [name, setName] = useState(user?.name || '');
-  const [email, setEmail] = useState(user?.email || '');
+  const { user, updatePassword } = useAuth();
+  const [name, setName] = useState('');
+  const [empresa, setEmpresa] = useState('');
+  const [phone, setPhone] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [language, setLanguage] = useState('pt-br');
-  const [notifications, setNotifications] = useState({
-    email: true,
-    push: true,
-    marketing: false,
-  });
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [profileData, setProfileData] = useState(null);
 
-  // Verificar se usuário tem senha padrão
-  const currentUserData = getUserByEmail(user?.email);
-  const hasDefaultPassword = currentUserData?.password === 'exxata123' || currentUserData?.status === 'Pendente';
+  // Carregar dados do perfil do Supabase
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user?.id) return;
 
-  const handleSaveProfile = (e) => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+
+        if (error) throw error;
+
+        setProfileData(data);
+        setName(data.name || '');
+        setEmpresa(data.empresa || '');
+        setPhone(data.phone || '');
+      } catch (error) {
+        console.error('Erro ao carregar perfil:', error);
+        // Usar dados do contexto como fallback
+        setName(user?.name || '');
+        setEmpresa(user?.empresa || '');
+        setPhone(user?.phone || '');
+      }
+    };
+
+    loadProfile();
+  }, [user]);
+
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
     setIsSaving(true);
     
-    // Simular salvamento
-    setTimeout(() => {
-      console.log('Perfil atualizado:', { name, email });
-      setIsSaving(false);
+    try {
+      // Atualizar perfil no Supabase
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          name: name.trim(),
+          empresa: empresa.trim(),
+          phone: phone.trim(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      toast.success('Perfil atualizado com sucesso!');
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    }, 1000);
+      
+      // Recarregar dados do perfil
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      
+      if (data) setProfileData(data);
+      
+    } catch (error) {
+      console.error('Erro ao atualizar perfil:', error);
+      toast.error('Erro ao atualizar perfil. Tente novamente.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleChangePassword = async (e) => {
@@ -67,74 +112,64 @@ export function Settings() {
       return;
     }
 
-    if (newPassword === 'exxata123') {
-      toast.error('Por segurança, não é possível usar a senha padrão "exxata123".');
-      return;
-    }
-
     setIsSaving(true);
 
     try {
-      // Verificar senha atual
-      const userData = getUserByEmail(user?.email);
-      if (!userData) {
-        throw new Error('Usuário não encontrado.');
-      }
+      // Primeiro, verificar a senha atual fazendo login
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword
+      });
 
-      // Validar senha atual
-      const expectedCurrentPassword = userData.password || 'exxata123';
-      if (currentPassword !== expectedCurrentPassword) {
+      if (signInError) {
         throw new Error('Senha atual incorreta.');
       }
 
-      // Atualizar senha no contexto de usuários
-      updateUser(userData.id, {
-        password: newPassword,
-        status: 'Ativo', // Garantir que status seja ativo
-        passwordChangedAt: new Date().toISOString(),
-        hasCustomPassword: true // Flag para indicar senha personalizada
-      });
+      // Atualizar senha no Supabase Auth
+      const { error: updateError } = await updatePassword(newPassword);
+      
+      if (updateError) throw updateError;
 
-      // TODO: Integração com Supabase
-      // await supabase.auth.updateUser({ password: newPassword });
+      // Atualizar informações no perfil
+      await supabase
+        .from('profiles')
+        .update({
+          has_custom_password: true,
+          password_changed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
 
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setIsSaving(false);
       
-      toast.success('Senha alterada com sucesso! Sua senha personalizada será mantida até que um administrador a resete.');
+      toast.success('Senha alterada com sucesso!');
       
     } catch (error) {
       console.error('Erro ao alterar senha:', error);
-      setIsSaving(false);
       toast.error(error.message || 'Erro ao alterar senha. Tente novamente.');
+    } finally {
+      setIsSaving(false);
     }
-  };
-
-  const toggleNotification = (type) => {
-    setNotifications(prev => ({
-      ...prev,
-      [type]: !prev[type]
-    }));
   };
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho da página com melhor espaçamento e contraste */}
+      {/* Cabeçalho da página */}
       <div className="bg-white rounded-lg border shadow-sm p-6 mb-6">
         <div className="space-y-2">
           <h2 className="text-3xl font-bold tracking-tight text-gray-900">
             Configurações
           </h2>
           <p className="text-gray-600 text-lg">
-            Gerencie as configurações da sua conta e preferências
+            Gerencie as informações da sua conta
           </p>
         </div>
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="profile">
             <User className="h-4 w-4 mr-2" />
             Perfil
@@ -143,28 +178,25 @@ export function Settings() {
             <Lock className="h-4 w-4 mr-2" />
             Segurança
           </TabsTrigger>
-          <TabsTrigger value="notifications">
-            <Bell className="h-4 w-4 mr-2" />
-            Notificações
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Perfil</CardTitle>
+              <CardTitle>Informações do Perfil</CardTitle>
               <CardDescription>
-                Atualize suas informações de perfil e endereço de e-mail.
+                Atualize suas informações pessoais.
               </CardDescription>
             </CardHeader>
             <form onSubmit={handleSaveProfile}>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nome</Label>
+                  <Label htmlFor="name">Nome Completo</Label>
                   <Input 
                     id="name" 
                     value={name} 
                     onChange={(e) => setName(e.target.value)} 
+                    placeholder="Seu nome completo"
                     required 
                   />
                 </div>
@@ -176,19 +208,46 @@ export function Settings() {
                       id="email"
                       type="email"
                       className="pl-10"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
+                      value={user?.email || ''}
+                      disabled
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    O e-mail não pode ser alterado. Entre em contato com o administrador se necessário.
+                  </p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Empresa</Label>
-                  <Input value="Exxata Consultoria" disabled />
+                  <Label htmlFor="empresa">Empresa</Label>
+                  <Input 
+                    id="empresa"
+                    value={empresa} 
+                    onChange={(e) => setEmpresa(e.target.value)}
+                    placeholder="Nome da empresa"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Telefone</Label>
+                  <Input 
+                    id="phone"
+                    type="tel"
+                    value={phone} 
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="(00) 00000-0000"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Formato: (DDD) 00000-0000 ou (DDD) 0000-0000
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>Função</Label>
-                  <Input value={user?.role || 'Admin'} disabled />
+                  <Input 
+                    value={user?.role || ''} 
+                    disabled 
+                    className="capitalize"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    A função é definida pelo administrador do sistema.
+                  </p>
                 </div>
               </CardContent>
               <CardFooter className="border-t px-6 py-4">
@@ -199,82 +258,23 @@ export function Settings() {
               </CardFooter>
             </form>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Preferências</CardTitle>
-              <CardDescription>
-                Configure suas preferências de idioma e região.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="language">Idioma</Label>
-                <Select value={language} onValueChange={setLanguage}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um idioma" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pt-br">Português (Brasil)</SelectItem>
-                    <SelectItem value="en-us">English (US)</SelectItem>
-                    <SelectItem value="es">Español</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="timezone">Fuso Horário</Label>
-                <Select defaultValue="-03:00">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um fuso horário" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="-03:00">(GMT-03:00) Brasília</SelectItem>
-                    <SelectItem value="-04:00">(GMT-04:00) Manaus</SelectItem>
-                    <SelectItem value="-05:00">(GMT-05:00) Rio Branco</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-            <CardFooter className="border-t px-6 py-4">
-              <Button>Salvar Preferências</Button>
-            </CardFooter>
-          </Card>
         </TabsContent>
 
         <TabsContent value="security" className="space-y-4">
-          {/* Card de Status da Senha */}
-          <Card className={hasDefaultPassword ? "border-orange-200 bg-orange-50" : "border-green-200 bg-green-50"}>
-            <CardContent className="pt-6">
-              <div className="flex items-center space-x-3">
-                <div className={`h-3 w-3 rounded-full ${hasDefaultPassword ? 'bg-orange-500' : 'bg-green-500'}`}></div>
-                <div>
-                  <h4 className="font-medium">
-                    {hasDefaultPassword ? 'Senha Padrão em Uso' : 'Senha Personalizada'}
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    {hasDefaultPassword 
-                      ? 'Você está usando a senha padrão "exxata123". Recomendamos alterar para maior segurança.'
-                      : 'Você possui uma senha personalizada. Ela será mantida até que um administrador a resete.'
-                    }
-                  </p>
-                  {currentUserData?.passwordChangedAt && (
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Última alteração: {new Date(currentUserData.passwordChangedAt).toLocaleDateString('pt-BR')}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle>Alterar Senha</CardTitle>
               <CardDescription>
                 Altere sua senha. Certifique-se de que ela seja forte e única.
-                {hasDefaultPassword && (
-                  <span className="block mt-2 text-orange-600 font-medium">
-                    ⚠️ Você está usando a senha padrão. Recomendamos alterar para uma senha personalizada.
+                {profileData?.password_changed_at && (
+                  <span className="block mt-2 text-sm text-muted-foreground">
+                    Última alteração: {new Date(profileData.password_changed_at).toLocaleDateString('pt-BR', {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
                   </span>
                 )}
               </CardDescription>
@@ -289,7 +289,7 @@ export function Settings() {
                       type={showCurrentPassword ? "text" : "password"}
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
-                      placeholder={hasDefaultPassword ? "Digite: exxata123" : "Digite sua senha atual"}
+                      placeholder="Digite sua senha atual"
                       required
                       className="pr-10"
                     />
@@ -316,7 +316,7 @@ export function Settings() {
                       type={showNewPassword ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Mínimo 6 caracteres (não use 'exxata123')"
+                      placeholder="Mínimo 6 caracteres"
                       required
                       className="pr-10"
                     />
@@ -335,7 +335,7 @@ export function Settings() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Sua senha personalizada será mantida até que um administrador a resete.
+                    Use uma senha forte com letras, números e caracteres especiais.
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -372,112 +372,6 @@ export function Settings() {
                 </Button>
               </CardFooter>
             </form>
-          </Card>
-
-        </TabsContent>
-
-        <TabsContent value="notifications" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notificações</CardTitle>
-              <CardDescription>
-                Escolha como você gostaria de receber notificações.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <h4 className="font-medium">Por E-mail</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Atividades da Conta</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receba notificações sobre atividades importantes na sua conta
-                      </p>
-                    </div>
-                    <Switch 
-                      checked={notifications.email}
-                      onCheckedChange={() => toggleNotification('email')}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Atualizações de Projetos</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receba atualizações sobre os projetos que você está seguindo
-                      </p>
-                    </div>
-                    <Switch 
-                      checked={notifications.email}
-                      onCheckedChange={() => toggleNotification('email')}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h4 className="font-medium">Notificações por Push</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Mensagens Diretas</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receba notificações quando receber mensagens diretas
-                      </p>
-                    </div>
-                    <Switch 
-                      checked={notifications.push}
-                      onCheckedChange={() => toggleNotification('push')}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Lembretes de Tarefas</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receba lembretes sobre tarefas pendentes
-                      </p>
-                    </div>
-                    <Switch 
-                      checked={notifications.push}
-                      onCheckedChange={() => toggleNotification('push')}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h4 className="font-medium">Comunicações de Marketing</h4>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Novidades e Atualizações</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receba e-mails sobre novos recursos e atualizações
-                      </p>
-                    </div>
-                    <Switch 
-                      checked={notifications.marketing}
-                      onCheckedChange={() => toggleNotification('marketing')}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label>Dicas e Tutoriais</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receba dicas úteis para aproveitar ao máximo a plataforma
-                      </p>
-                    </div>
-                    <Switch 
-                      checked={notifications.marketing}
-                      onCheckedChange={() => toggleNotification('marketing')}
-                    />
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="border-t px-6 py-4">
-              <Button>Salvar Preferências</Button>
-            </CardFooter>
           </Card>
         </TabsContent>
       </Tabs>

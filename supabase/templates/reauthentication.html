@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reautenticação Necessária - Exxata Connect</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #eeeeee;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #eeeeee;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" style="width: 100%; max-width: 600px; border-collapse: collapse; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header -->
+          <tr>
+            <td style="background-color: #09182b; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700;">Exxata Connect</h1>
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px 30px;">
+              <h2 style="margin: 0 0 20px 0; color: #09182b; font-size: 22px; font-weight: 600;">Reautenticação Necessária</h2>
+              
+              <p style="margin: 0 0 20px 0; color: #333333; font-size: 16px; line-height: 1.6;">
+                Por motivos de segurança, precisamos que você confirme sua identidade.
+              </p>
+              
+              <p style="margin: 0 0 30px 0; color: #333333; font-size: 16px; line-height: 1.6;">
+                Clique no botão abaixo para fazer login novamente:
+              </p>
+              
+              <!-- CTA Button -->
+              <table role="presentation" style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td align="center" style="padding: 0 0 30px 0;">
+                    <a href="{{ .ConfirmationURL }}" style="display: inline-block; background-color: #d51d07; color: #ffffff; text-decoration: none; padding: 14px 40px; border-radius: 6px; font-size: 16px; font-weight: 600;">
+                      Fazer Login
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              
+              <div style="background-color: #e7f3ff; border-left: 4px solid #1616d6; padding: 15px 20px; margin: 20px 0;">
+                <p style="margin: 0; color: #004085; font-size: 14px; line-height: 1.6;">
+                  <strong>ℹ️ Por que isso acontece?</strong><br>
+                  A reautenticação é solicitada quando você tenta realizar ações sensíveis ou após um período de inatividade, garantindo a segurança da sua conta.
+                </p>
+              </div>
+              
+              <div style="border-top: 1px solid #eeeeee; padding-top: 20px; margin-top: 20px;">
+                <p style="margin: 0; color: #999999; font-size: 13px; line-height: 1.6;">
+                  Este link é válido por 1 hora.
+                </p>
+              </div>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f8f8f8; padding: 25px 30px; text-align: center; border-radius: 0 0 8px 8px; border-top: 1px solid #eeeeee;">
+              <p style="margin: 0 0 10px 0; color: #666666; font-size: 13px; line-height: 1.6;">
+                © 2024 Exxata Engenharia. Todos os direitos reservados.
+              </p>
+              <p style="margin: 0; color: #999999; font-size: 12px; line-height: 1.6;">
+                Este é um e-mail automático, por favor não responda.
+              </p>
+            </td>
+          </tr>
+          
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

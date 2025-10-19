@@ -583,13 +583,10 @@ export const fileService = {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Usuário não autenticado');
 
-      // Garantir que projectId seja um número
-      const numericProjectId = Number(projectId);
-
       // Gerar nome único para o arquivo
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `${numericProjectId}/${fileName}`;
+      const filePath = `${projectId}/${fileName}`;
 
       // Upload para o Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -602,7 +599,7 @@ export const fileService = {
       const { data, error } = await supabase
         .from('project_files')
         .insert({
-          project_id: numericProjectId,
+          project_id: projectId,
           name: file.name, // Display name
           original_name: file.name, // Original filename
           size_bytes: file.size,

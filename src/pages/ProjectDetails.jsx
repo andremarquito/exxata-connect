@@ -443,9 +443,9 @@ export function ProjectDetails() {
   const isAdmin = userRole === 'admin' || userRole === 'administrador';
   const isManager = userRole === 'manager' || userRole === 'gerente';
   const isCollaborator = userRole === 'collaborator' || userRole === 'colaborador' || userRole === 'consultor' || userRole === 'consultant';
-  const canEdit = isAdmin || isManager || hasPermission('edit_projects');
-  // Consultor/Admin podem editar textos da aba Inteligência Humana
-  const canManageInsights = canEdit || ['consultant', 'consultor'].includes((user?.role || '').toLowerCase());
+  const canEdit = isAdmin || isManager || isCollaborator || hasPermission('edit_projects');
+  // Consultor/Admin/Colaborador podem editar textos da aba Inteligência Humana
+  const canManageInsights = canEdit;
 
   // Atividades do projeto (persistidas no contexto)
   const activities = Array.isArray(project?.activities) ? project.activities : [];
@@ -1355,7 +1355,7 @@ export function ProjectDetails() {
             </Button>
           )}
           
-          {activeTab === 'team' && (
+          {activeTab === 'team' && canEdit && (
             <Button onClick={() => setShowAddMember(true)} size="sm" className="gap-1 bg-exxata-red hover:bg-red-700 text-white">
               <UserPlus className="h-4 w-4" />
               Adicionar Membro

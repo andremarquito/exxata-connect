@@ -216,9 +216,19 @@ CREATE POLICY "Project creators can delete projects"
 CREATE POLICY "Users can view members of their projects"
   ON project_members FOR SELECT
   USING (
-    project_members.user_id = auth.uid() OR
-    public.is_project_creator(project_members.project_id, auth.uid()) OR
-    public.is_admin_or_manager(auth.uid())
+    -- Admin/Manager podem ver todos os membros
+    EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE profiles.id = auth.uid() 
+      AND profiles.role IN ('admin', 'administrador', 'manager', 'gerente')
+    )
+    OR
+    -- Usuário pode ver membros de projetos acessíveis
+    -- Delega verificação para RLS de projects (sem causar recursão)
+    EXISTS (
+      SELECT 1 FROM projects p
+      WHERE p.id = project_members.project_id
+    )
   );
 
 CREATE POLICY "Project creators can add members"

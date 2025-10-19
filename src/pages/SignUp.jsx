@@ -12,6 +12,7 @@ const SignUpForm = () => {
     fullName: '',
     email: '',
     empresa: '',
+    phone: '',
     password: '',
     confirmPassword: ''
   });
@@ -55,12 +56,17 @@ const SignUpForm = () => {
     try {
       const result = await signup(formData.email, formData.password, {
         full_name: formData.fullName.trim(),
-        empresa: formData.empresa.trim()
+        empresa: formData.empresa.trim(),
+        phone: formData.phone.trim()
       });
 
       if (result.success) {
-        toast.success('Conta criada com sucesso! Verifique seu e-mail para confirmar.');
-        navigate('/login');
+        toast.success(
+          'Conta criada com sucesso! Enviamos um e-mail de confirmação. Verifique sua caixa de entrada e spam.',
+          { duration: 6000 }
+        );
+        // Redirecionar para página de confirmação pendente
+        navigate('/confirm-email', { state: { email: formData.email } });
       }
     } catch (error) {
       console.error('Erro no cadastro:', error);
@@ -104,6 +110,18 @@ const SignUpForm = () => {
                 value={formData.empresa}
                 onChange={handleChange}
                 required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">Telefone</Label>
+              <Input
+                id="phone"
+                name="phone"
+                type="tel"
+                placeholder="(00) 00000-0000"
+                value={formData.phone}
+                onChange={handleChange}
               />
             </div>
 

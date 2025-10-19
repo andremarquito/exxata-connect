@@ -120,88 +120,83 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
     let basicResult;
     
     if (isClient || isCollaborator) {
-      // Para clientes e colaboradores: buscar projetos via membership
-      console.log('👤 Usuário com acesso restrito detectado, carregando projetos via membership');
-      
-      // Primeiro, obter os IDs dos projetos onde o usuário é membro
-      const normalizedUserId = String(userId);
-      const { data: memberships, error: membershipError } = await supabase
-        .from('project_members')
-        .select('project_id')
-        .eq('user_id', normalizedUserId);
-      
-      if (!memberships || memberships.length === 0) {
-        console.log('👤 Usuário não é membro de nenhum projeto');
-        basicResult = { data: [], error: null };
-      } else {
-        // Obter os projetos pelos IDs encontrados
-        const projectIds = memberships.map(m => String(m.project_id));
-        
-        basicResult = await supabase
-          .from('projects')
-          .select(`
-            *,
-            project_activities_old:project_activities_old(
-              id,
-              custom_id,
-              name,
-              responsible,
-              start_date,
-              end_date,
-              status,
-              created_at,
-              updated_at
-            ),
-            project_files(
+      // Para clientes e colaboradores: carregar projetos diretamente via RLS (sem pré-busca em project_members)
+      console.log('👤 Usuário com acesso restrito, carregando projetos via RLS + JOIN de membros');
+
+      basicResult = await supabase
+        .from('projects')
+        .select(`
+          *,
+          project_members(
+            id,
+            user_id,
+            project_id,
+            role,
+            profiles!project_members_user_id_fkey (
               id,
               name,
-              file_path,
-              file_size,
-              mime_type,
-              uploaded_by,
-              created_at
-            ),
-            project_indicators(
-              id,
-              title,
-              chart_type,
-              datasets,
-              labels,
-              options,
-              created_at,
-              updated_at
+              email,
+              role,
+              status
             )
-          `)
-          .in('id', projectIds);
-          
-        // Carregar membros para cada projeto
-        if (basicResult.data) {
-          for (const project of basicResult.data) {
-            const membersResult = await supabase
-              .from('project_members')
-              .select(`
-                *,
-                profiles (
-                  id,
-                  name,
-                  email,
-                  role,
-                  status
-                )
-              `)
-              .eq('project_id', project.id.toString());
-              
-            project.members = membersResult.data || [];
-          }
-        }
-      }
+          ),
+          project_activities_old:project_activities_old(
+            id,
+            custom_id,
+            name,
+            responsible,
+            start_date,
+            end_date,
+            status,
+            created_at,
+            updated_at
+          ),
+          project_files(
+            id,
+            name,
+            file_path,
+            file_size,
+            mime_type,
+            uploaded_by,
+            created_at
+          ),
+          project_indicators(
+            id,
+            title,
+            chart_type,
+            datasets,
+            labels,
+            options,
+            created_at,
+            updated_at
+          )
+        `);
+
+      console.log('👥 Projetos (com membros) carregados via RLS:', {
+        projectsCount: basicResult.data?.length || 0,
+        error: basicResult.error
+      });
     } else {
       // Para admins/managers: buscar projetos criados pelo usuário
+      // Carregar membros via JOIN diretamente
       console.log('👔 Usuário staff detectado, carregando projetos criados');
       basicResult = await supabase
         .from('projects')
         .select(`
           *,
+          project_members(
+            id,
+            user_id,
+            project_id,
+            role,
+            profiles!project_members_user_id_fkey (
+              id,
+              name,
+              email,
+              role,
+              status
+            )
+          ),
           project_activities_old:project_activities_old(
             id,
             custom_id,
@@ -234,27 +229,6 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
           )
         `)
         .eq('created_by', userId);
-        
-      // Carregar membros separadamente para cada projeto
-      if (basicResult.data) {
-        for (const project of basicResult.data) {
-          const membersResult = await supabase
-            .from('project_members')
-            .select(`
-              *,
-              profiles (
-                id,
-                name,
-                email,
-                role,
-                status
-              )
-            `)
-            .eq('project_id', project.id.toString());
-            
-          project.members = membersResult.data || [];
-        }
-      }
     }
       
     data = basicResult.data;
@@ -300,19 +274,19 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
       createdBy: project.created_by,
       team: [], // Team vem da tabela project_members, será carregado separadamente
       aiPredictiveText: project.ai_predictive_text || '',
-      //  MEMBROS AGORA CARREGAM VIA VIEW (se disponível)
-      members: project.members ?
-        Array.isArray(project.members) ? project.members.map(member => ({
+      //  MEMBROS AGORA CARREGAM VIA JOIN em project_members
+      members: project.project_members && Array.isArray(project.project_members) 
+        ? project.project_members.map(member => ({
           // keep both id and user_id for compatibility with visibility checks
           id: member.user_id ?? member.id,
           user_id: member.user_id ?? member.id,
-          name: member.name || member.email?.split('@')[0] || 'Usuário',
-          email: member.email,
-          role: member.profile_role || member.role || 'member',
-          status: member.status || 'Ativo',
+          name: member.profiles?.name || member.profiles?.email?.split('@')[0] || 'Usuário',
+          email: member.profiles?.email || '',
+          role: member.profiles?.role || member.role || 'member',
+          status: member.profiles?.status || 'Ativo',
           addedAt: member.added_at,
           addedBy: member.added_by
-        })) : [] : [],
+        })) : [],
 
       //  CONDUTAS AGORA CARREGAM VIA VIEW (se disponível)
       conducts: project.conducts ?
@@ -667,7 +641,7 @@ export function ProjectsProvider({ children }) {
     }
   };
 
-  const getProjectById = (id) => projects.find(p => p.id === Number(id));
+  const getProjectById = (id) => projects.find(p => String(p.id) === String(id));
 
   // Função helper para retry em caso de timeout de autenticação
   const withAuthRetry = async (operation, maxRetries = 1) => {
@@ -725,7 +699,7 @@ export function ProjectsProvider({ children }) {
       
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const activities = Array.isArray(p.activities) ? p.activities : [];
         return {
           ...p,
@@ -759,7 +733,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const activities = Array.isArray(p.activities) ? p.activities : [];
         return {
           ...p,
@@ -784,7 +758,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const activities = Array.isArray(p.activities) ? p.activities : [];
         return {
           ...p,
@@ -818,7 +792,7 @@ export function ProjectsProvider({ children }) {
       
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const activities = Array.isArray(p.activities) ? p.activities : [];
         return {
           ...p,
@@ -852,7 +826,7 @@ export function ProjectsProvider({ children }) {
       
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         return {
           ...p,
           activities: activities.map(a => ({
@@ -889,7 +863,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const files = Array.isArray(p.files) ? p.files : [];
         return {
           ...p,
@@ -914,7 +888,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const files = Array.isArray(p.files) ? p.files : [];
         return {
           ...p,
@@ -939,7 +913,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         return {
           ...p,
           files: files.map(f => ({
@@ -989,7 +963,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const indicators = Array.isArray(p.project_indicators) ? p.project_indicators : [];
         return {
           ...p,
@@ -1014,7 +988,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const indicators = Array.isArray(p.project_indicators) ? p.project_indicators : [];
         return {
           ...p,
@@ -1041,7 +1015,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const indicators = Array.isArray(p.project_indicators) ? p.project_indicators : [];
         return {
           ...p,
@@ -1066,7 +1040,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         return {
           ...p,
           project_indicators: indicators
@@ -1115,7 +1089,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         return {
           ...p,
           panorama: panorama
@@ -1143,7 +1117,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const currentPanorama = p.panorama || {};
         return {
           ...p,
@@ -1175,7 +1149,7 @@ export function ProjectsProvider({ children }) {
       // Atualizar estado local
       setProjects(prev => {
         const updatedProjects = [...prev];
-        const projectIndex = updatedProjects.findIndex(p => p.id === Number(projectId));
+        const projectIndex = updatedProjects.findIndex(p => String(p.id) === String(projectId));
         if (projectIndex !== -1) {
           const project = updatedProjects[projectIndex];
           const currentPanorama = project.panorama || {};
@@ -1212,7 +1186,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const currentPanorama = p.panorama || {};
         const currentSection = currentPanorama[sectionKey] || { status: 'green', items: [] };
         return {
@@ -1246,7 +1220,7 @@ export function ProjectsProvider({ children }) {
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const currentPanorama = p.panorama || {};
         const currentSection = currentPanorama[sectionKey] || { status: 'green', items: [] };
         return {
@@ -1291,18 +1265,30 @@ export function ProjectsProvider({ children }) {
       if (role === 'admin' || role === 'administrador' || role === 'manager' || role === 'gerente') return true;
       if (createdBy && createdBy === userId) return true;
 
-      if (role === 'cliente' || role === 'client') {
-        if (p?.source === 'supabase') return true;
-      }
-
       // Verificar membros do projeto (tanto id quanto user_id) como string
       const members = Array.isArray(p?.members) ? p.members : [];
+      console.log('👥 Verificando membros do projeto:', {
+        projectId: p?.id,
+        membersArray: members,
+        membersLength: members.length,
+        userId,
+        memberIds: members.map(m => ({
+          user_id: m?.user_id,
+          id: m?.id,
+          profiles: m?.profiles
+        }))
+      });
+      
       if (members.length > 0) {
         const isMember = members.some(m => {
           const mid = m?.user_id != null ? String(m.user_id) : (m?.id != null ? String(m.id) : null);
+          console.log('🔍 Comparando:', { mid, userId, match: mid === userId });
           return mid === userId;
         });
-        if (isMember) return true;
+        if (isMember) {
+          console.log('✅ Usuário é membro do projeto!');
+          return true;
+        }
       }
 
       // Verificar time legado
@@ -1457,7 +1443,7 @@ export function ProjectsProvider({ children }) {
       
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const conducts = Array.isArray(p.conducts) ? p.conducts : [];
         return {
           ...p,
@@ -1495,7 +1481,7 @@ export function ProjectsProvider({ children }) {
       
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const conducts = Array.isArray(p.conducts) ? p.conducts : [];
         return {
           ...p,
@@ -1529,7 +1515,7 @@ export function ProjectsProvider({ children }) {
       
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const conducts = Array.isArray(p.conducts) ? p.conducts : [];
         return {
           ...p,
@@ -1554,7 +1540,7 @@ export function ProjectsProvider({ children }) {
       
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         const conducts = Array.isArray(p.conducts) ? p.conducts : [];
         const reordered = newOrder.map((id, index) => {
           const conduct = conducts.find(c => c.id === id);
@@ -1580,7 +1566,7 @@ export function ProjectsProvider({ children }) {
       
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
-        if (p.id !== Number(projectId)) return p;
+        if (String(p.id) !== String(projectId)) return p;
         return {
           ...p,
           conducts: conducts.map(c => ({

@@ -237,7 +237,7 @@ export function UsersProvider({ children }) {
     }
   };
 
-  const getUserById = (id) => users.find((u) => u.id === Number(id));
+  const getUserById = (id) => users.find((u) => String(u.id) === String(id));
   const getUserByEmail = (email) => users.find((u) => u.email?.toLowerCase() === String(email).toLowerCase());
 
   const value = useMemo(

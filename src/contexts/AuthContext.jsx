@@ -16,6 +16,26 @@ const withTimeout = (promise, ms = 8000) => {
   });
 };
 
+// Cache de perfis para evitar consultas repetidas
+const profileCache = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+
+const getCachedProfile = (userId) => {
+  const cached = profileCache.get(userId);
+  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+    console.log('📦 Usando perfil em cache para:', userId);
+    return cached.profile;
+  }
+  return null;
+};
+
+const setCachedProfile = (userId, profile) => {
+  profileCache.set(userId, {
+    profile,
+    timestamp: Date.now()
+  });
+};
+
 // Função para definir permissões baseadas no role
 const getPermissionsByRole = (role) => {
   const normalizedRole = (role || '').toLowerCase();
@@ -44,7 +64,8 @@ const getPermissionsByRole = (role) => {
     case 'consultor':
     case 'consultant':
       return [
-        'view_projects'
+        'view_projects',
+        'edit_projects'
       ];
     case 'client':
     case 'cliente':
@@ -61,6 +82,12 @@ const getUserProfile = async (supabaseUser) => {
   try {
     console.log('🔍 Buscando perfil para usuário:', supabaseUser.email);
     
+    // Verificar cache primeiro
+    const cachedProfile = getCachedProfile(supabaseUser.id);
+    if (cachedProfile) {
+      return cachedProfile;
+    }
+    
     let profile = null;
     
     // Tentar buscar dados adicionais do usuário na tabela profiles (se existir)
@@ -71,7 +98,7 @@ const getUserProfile = async (supabaseUser) => {
           .select('*')
           .eq('id', supabaseUser.id)
           .single(),
-        5000 // 5 segundos de timeout para busca de perfil
+        10000 // 10 segundos de timeout para busca de perfil (aumentado)
       );
 
       if (error) {
@@ -90,32 +117,35 @@ const getUserProfile = async (supabaseUser) => {
       console.warn('⚠️ Erro na consulta de perfil:', profileError.message);
     }
 
-    // Determinar role baseado no email ou perfil
-    let role = 'cliente'; // padrão
+    // Determinar role - PRIORIDADE: 1) Perfil Supabase, 2) Fallback de email, 3) Padrão
+    let role = null;
     let name = supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Usuário';
 
-    // Primeiro, verificar fallback baseado no email (mais confiável)
-    if (supabaseUser.email === 'admin@exxata.com') {
-      role = 'admin';
-      name = 'Admin';
-    } else if (supabaseUser.email === 'consultor@exxata.com') {
-      role = 'consultor';
-      name = 'Consultor';
-    } else if (supabaseUser.email === 'andre.marquito@exxata.com.br') {
-      role = 'admin'; // Definir role específico para este usuário
-      name = 'André Marquito';
-    }
-
-    // Se houver perfil no Supabase, pode sobrescrever
+    // PRIORIDADE 1: Se houver perfil no Supabase, usar ele
     if (profile && profile.role) {
       role = profile.role;
       name = profile.name || name;
       console.log('📋 Role definido pelo perfil Supabase:', role);
-    } else {
+    }
+    // PRIORIDADE 2: Fallback baseado no email (apenas se não houver perfil)
+    else {
+      if (supabaseUser.email === 'admin@exxata.com') {
+        role = 'admin';
+        name = 'Admin';
+      } else if (supabaseUser.email === 'consultor@exxata.com') {
+        role = 'consultor';
+        name = 'Consultor';
+      } else if (supabaseUser.email === 'andre.marquito@exxata.com.br') {
+        role = 'admin';
+        name = 'André Marquito';
+      } else {
+        // PRIORIDADE 3: Padrão como último recurso
+        role = 'cliente';
+      }
       console.log('📋 Role definido por fallback de email:', role);
     }
 
-    return {
+    const userData = {
       id: supabaseUser.id,
       name,
       email: supabaseUser.email,
@@ -124,8 +154,20 @@ const getUserProfile = async (supabaseUser) => {
       permissions: getPermissionsByRole(role),
       supabaseUser // Manter referência ao usuário do Supabase
     };
+    
+    // Armazenar no cache
+    setCachedProfile(supabaseUser.id, userData);
+    
+    return userData;
   } catch (error) {
     console.error('❌ Erro crítico ao processar perfil do usuário:', error.message || error);
+    
+    // Tentar usar cache mesmo em caso de erro
+    const cachedProfile = getCachedProfile(supabaseUser.id);
+    if (cachedProfile) {
+      console.log('📦 Usando perfil em cache após erro');
+      return cachedProfile;
+    }
     
     // Fallback seguro baseado no email mesmo em caso de erro
     let fallbackRole = 'cliente';
@@ -142,8 +184,10 @@ const getUserProfile = async (supabaseUser) => {
       fallbackName = 'André Marquito';
     }
     
+    console.warn('⚠️ Usando fallback de emergência - role:', fallbackRole);
+    
     // Retornar dados básicos em caso de erro
-    return {
+    const fallbackData = {
       id: supabaseUser.id,
       name: supabaseUser.user_metadata?.full_name || fallbackName,
       email: supabaseUser.email,
@@ -151,6 +195,11 @@ const getUserProfile = async (supabaseUser) => {
       permissions: getPermissionsByRole(fallbackRole),
       supabaseUser
     };
+    
+    // Armazenar fallback no cache para evitar consultas repetidas
+    setCachedProfile(supabaseUser.id, fallbackData);
+    
+    return fallbackData;
   }
 };
 
@@ -303,9 +352,13 @@ export const AuthProvider = ({ children }) => {
       if (authError) {
         console.log('❌ Login Supabase falhou:', authError.message);
         
+        // Verificar se é erro de email não confirmado
+        if (authError.message?.includes('Email not confirmed')) {
+          throw new Error('Por favor, confirme seu e-mail antes de fazer login. Verifique sua caixa de entrada e spam.');
+        }
+        
         // Verificar se é erro de credenciais inválidas
         if (authError.message?.includes('Invalid login credentials') || 
-            authError.message?.includes('Email not confirmed') ||
             authError.message?.includes('Invalid email or password')) {
           console.log('🔄 Tentando sistema local como fallback');
           
@@ -324,6 +377,14 @@ export const AuthProvider = ({ children }) => {
       }
 
       if (authData.user) {
+        // Verificar se o email foi confirmado
+        if (!authData.user.email_confirmed_at) {
+          console.log('❌ Email não confirmado');
+          // Fazer logout imediatamente
+          await supabase.auth.signOut();
+          throw new Error('Por favor, confirme seu e-mail antes de fazer login. Verifique sua caixa de entrada e spam.');
+        }
+
         // Login Supabase bem-sucedido
         const userData = await getUserProfile(authData.user);
         console.log('✅ Login Supabase bem-sucedido, role:', userData.role);
@@ -538,6 +599,7 @@ export const AuthProvider = ({ children }) => {
               email: email.trim().toLowerCase(),
               name: metadata.full_name || email.split('@')[0],
               empresa: metadata.empresa,
+              phone: metadata.phone,
               role: 'cliente', // padrão para novos cadastros
               status: data.user.email_confirmed_at ? 'Ativo' : 'Pendente',
               invited_at: new Date().toISOString(),
