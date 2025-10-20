@@ -15,21 +15,21 @@ export function UsersProvider({ children }) {
   // Função para carregar profiles do Supabase
   const loadProfilesFromSupabase = async () => {
     try {
-      console.log('🔄 Carregando profiles do Supabase...');
+      // console.log('🔄 Carregando profiles do Supabase...'); // Desabilitado para reduzir logs
       
       const profiles = await loadTeam(supabase);
 
-      console.log('🔍 Resposta do Supabase:', {
-        count: profiles?.length,
-        rawData: profiles
-      });
+      // console.log('🔍 Resposta do Supabase:', {
+      //   count: profiles?.length,
+      //   rawData: profiles
+      // }); // Desabilitado para reduzir logs
 
       if (!profiles || profiles.length === 0) {
-        console.log('📝 Nenhum profile encontrado no Supabase');
+        // console.log('📝 Nenhum profile encontrado no Supabase'); // Desabilitado para reduzir logs
         return null;
       }
 
-      console.log('✅ Profiles encontrados no Supabase:', profiles.length);
+      // console.log('✅ Profiles encontrados no Supabase:', profiles.length); // Desabilitado para reduzir logs
       
       // Converter profiles do Supabase para formato local
       const mappedProfiles = profiles.map(profile => {

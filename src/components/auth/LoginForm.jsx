@@ -47,11 +47,12 @@ export function LoginForm() {
     setIsLoading(true);
     
     try {
+      console.log('🔐 LoginForm: Iniciando login para:', email.trim().toLowerCase());
       await login(email.trim().toLowerCase(), password);
       toast.success('Login realizado com sucesso!');
       navigate('/');
     } catch (error) {
-      console.error('Erro no login:', error);
+      console.error('❌ LoginForm: Erro no login:', error);
       
       // Mensagens de erro mais específicas
       let errorMessage = 'Erro ao fazer login. Tente novamente.';

@@ -80,11 +80,12 @@ const getPermissionsByRole = (role) => {
 // Função para buscar perfil do usuário
 const getUserProfile = async (supabaseUser) => {
   try {
-    console.log('🔍 Buscando perfil para usuário:', supabaseUser.email);
+    // console.log('🔍 Buscando perfil para usuário:', supabaseUser.email); // Desabilitado para reduzir logs
     
     // Verificar cache primeiro
     const cachedProfile = getCachedProfile(supabaseUser.id);
     if (cachedProfile) {
+      // console.log('📦 Usando perfil em cache'); // Desabilitado para reduzir logs
       return cachedProfile;
     }
     
@@ -103,21 +104,21 @@ const getUserProfile = async (supabaseUser) => {
 
       if (error) {
         if (error.code === 'PGRST116') {
-          console.log('📝 Tabela profiles não existe, usando fallback');
+          // console.log('📝 Tabela profiles não existe, usando fallback'); // Desabilitado para reduzir logs
         } else if (error.code === 'PGRST118') {
-          console.log('📝 Perfil não encontrado na tabela profiles, usando fallback');
+          // console.log('📝 Perfil não encontrado na tabela profiles, usando fallback'); // Desabilitado para reduzir logs
         } else {
           console.warn('⚠️ Erro ao buscar perfil:', error.message);
         }
       } else {
         profile = data;
-        console.log('✅ Perfil encontrado no Supabase:', profile.role);
+        // console.log('✅ Perfil encontrado no Supabase:', profile.role); // Desabilitado para reduzir logs
       }
     } catch (profileError) {
       console.warn('⚠️ Erro na consulta de perfil:', profileError.message);
     }
 
-    // Determinar role - PRIORIDADE: 1) Perfil Supabase, 2) Fallback de email, 3) Padrão
+    // Determinar role - PRIORIDADE: 1) Perfil Supabase, 2) Padrão
     let role = null;
     let name = supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Usuário';
 
@@ -125,24 +126,12 @@ const getUserProfile = async (supabaseUser) => {
     if (profile && profile.role) {
       role = profile.role;
       name = profile.name || name;
-      console.log('📋 Role definido pelo perfil Supabase:', role);
+      // console.log('📋 Role definido pelo perfil Supabase:', role); // Desabilitado para reduzir logs
     }
-    // PRIORIDADE 2: Fallback baseado no email (apenas se não houver perfil)
+    // PRIORIDADE 2: Padrão como último recurso (se não houver perfil)
     else {
-      if (supabaseUser.email === 'admin@exxata.com') {
-        role = 'admin';
-        name = 'Admin';
-      } else if (supabaseUser.email === 'consultor@exxata.com') {
-        role = 'consultor';
-        name = 'Consultor';
-      } else if (supabaseUser.email === 'andre.marquito@exxata.com.br') {
-        role = 'admin';
-        name = 'André Marquito';
-      } else {
-        // PRIORIDADE 3: Padrão como último recurso
-        role = 'cliente';
-      }
-      console.log('📋 Role definido por fallback de email:', role);
+      role = supabaseUser.user_metadata?.role || 'cliente';
+      console.warn('⚠️ Perfil não encontrado para usuário:', supabaseUser.email, '- usando role de JWT ou padrão:', role);
     }
 
     const userData = {
@@ -155,8 +144,10 @@ const getUserProfile = async (supabaseUser) => {
       supabaseUser // Manter referência ao usuário do Supabase
     };
     
-    // Armazenar no cache
-    setCachedProfile(supabaseUser.id, userData);
+    // Armazenar no cache somente se perfil foi carregado do banco
+    if (profile) {
+      setCachedProfile(supabaseUser.id, userData);
+    }
     
     return userData;
   } catch (error) {
@@ -169,20 +160,9 @@ const getUserProfile = async (supabaseUser) => {
       return cachedProfile;
     }
     
-    // Fallback seguro baseado no email mesmo em caso de erro
-    let fallbackRole = 'cliente';
-    let fallbackName = 'Usuário';
-    
-    if (supabaseUser.email === 'admin@exxata.com') {
-      fallbackRole = 'admin';
-      fallbackName = 'Admin';
-    } else if (supabaseUser.email === 'consultor@exxata.com') {
-      fallbackRole = 'consultor';
-      fallbackName = 'Consultor';
-    } else if (supabaseUser.email === 'andre.marquito@exxata.com.br') {
-      fallbackRole = 'admin';
-      fallbackName = 'André Marquito';
-    }
+    // Fallback seguro - tentar usar role do JWT; senão padrão
+    const fallbackRole = supabaseUser.user_metadata?.role || 'cliente';
+    const fallbackName = supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Usuário';
     
     console.warn('⚠️ Usando fallback de emergência - role:', fallbackRole);
     
@@ -196,9 +176,7 @@ const getUserProfile = async (supabaseUser) => {
       supabaseUser
     };
     
-    // Armazenar fallback no cache para evitar consultas repetidas
-    setCachedProfile(supabaseUser.id, fallbackData);
-    
+    // Não armazenar fallback no cache; tentar buscar perfil novamente em futuras tentativas
     return fallbackData;
   }
 };
@@ -212,7 +190,7 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        console.log('🔍 Verificando autenticação...');
+        // console.log('🔍 Verificando autenticação...'); // Desabilitado para reduzir logs
         
         // Verificar sessão do Supabase primeiro com timeout
         let session = null;
@@ -236,7 +214,7 @@ export const AuthProvider = ({ children }) => {
         }
 
         if (session?.user) {
-          console.log('✅ Sessão Supabase encontrada:', session.user.email);
+          // console.log('✅ Sessão Supabase encontrada:', session.user.email); // Desabilitado para reduzir logs
           // Usuário autenticado no Supabase
           const supabaseUser = session.user;
           
@@ -244,61 +222,25 @@ export const AuthProvider = ({ children }) => {
           try {
             const userData = await getUserProfile(supabaseUser);
             setUser(userData);
-            console.log('✅ Profile carregado:', userData.name, 'Role:', userData.role);
+            // console.log('✅ Profile carregado:', userData.name, 'Role:', userData.role); // Desabilitado para reduzir logs
           } catch (profileError) {
             console.error('❌ Erro ao carregar perfil, usando dados básicos:', profileError.message);
             // Fallback com dados básicos do Supabase
+            const fallbackRole = supabaseUser.user_metadata?.role;
             setUser({
               id: supabaseUser.id,
-              name: supabaseUser.email?.split('@')[0] || 'Usuário',
+              name: supabaseUser.user_metadata?.full_name || supabaseUser.email?.split('@')[0] || 'Usuário',
               email: supabaseUser.email,
-              role: supabaseUser.email === 'andre.marquito@exxata.com.br' ? 'admin' : 'cliente',
-              permissions: getPermissionsByRole(supabaseUser.email === 'andre.marquito@exxata.com.br' ? 'admin' : 'cliente'),
+              role: fallbackRole,
+              permissions: getPermissionsByRole(fallbackRole),
               supabaseUser
             });
           }
         } else {
-          console.log('❌ Nenhuma sessão Supabase, usando sistema local');
-          // Fallback para sistema local (compatibilidade)
-          const token = localStorage.getItem('token');
-          if (token) {
-            const rawUser = localStorage.getItem('auth_user');
-            if (rawUser) {
-              try { 
-                const localUser = JSON.parse(rawUser);
-                setUser(localUser);
-                console.log('✅ Usuário local carregado:', localUser.email);
-              } catch { 
-                localStorage.removeItem('auth_user');
-                localStorage.removeItem('token');
-              }
-            }
-          }
+          // console.log('ℹ️ Nenhuma sessão Supabase ativa'); // Desabilitado para reduzir logs
         }
       } catch (error) {
         console.error('Erro ao verificar autenticação:', error?.message || error || 'Erro desconhecido');
-        
-        // Fallback para sistema local em caso de timeout
-        console.log('🔄 Fallback para sistema local devido a erro');
-        try {
-          const token = localStorage.getItem('token');
-          if (token) {
-            const rawUser = localStorage.getItem('auth_user');
-            if (rawUser) {
-              try { 
-                const localUser = JSON.parse(rawUser);
-                setUser(localUser);
-                console.log('✅ Fallback: usuário local carregado');
-              } catch (parseError) { 
-                console.warn('⚠️ Erro ao fazer parse do usuário local:', parseError.message);
-                localStorage.removeItem('auth_user');
-                localStorage.removeItem('token');
-              }
-            }
-          }
-        } catch (fallbackError) {
-          console.error('❌ Erro no fallback:', fallbackError.message);
-        }
       } finally {
         setIsLoading(false);
       }
@@ -309,24 +251,24 @@ export const AuthProvider = ({ children }) => {
     // Escutar mudanças de autenticação do Supabase
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('🔄 Auth state changed:', event, session?.user?.email);
+        // console.log('🔄 Auth state changed:', event, session?.user?.email); // Desabilitado para reduzir logs
         
         if (session?.user) {
           // Evitar sobrescrever dados se o usuário já está logado com o mesmo email
           if (user && user.email === session.user.email) {
-            console.log('👤 Usuário já logado, mantendo dados atuais');
+            // console.log('👤 Usuário já logado, mantendo dados atuais'); // Desabilitado para reduzir logs
             return;
           }
           
           const userData = await getUserProfile(session.user);
-          console.log('👤 Definindo usuário via auth state change:', userData.role);
+          // console.log('👤 Definindo usuário via auth state change:', userData.role); // Desabilitado para reduzir logs
           setUser(userData);
           
           // Atualizar localStorage para manter consistência
           localStorage.setItem('token', 'supabase-session');
           localStorage.setItem('auth_user', JSON.stringify(userData));
         } else {
-          console.log('👤 Logout detectado, limpando dados');
+          // console.log('👤 Logout detectado, limpando dados'); // Desabilitado para reduzir logs
           setUser(null);
           // Limpar dados locais quando logout do Supabase
           localStorage.removeItem('token');
@@ -342,15 +284,26 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       console.log('🔐 Tentando login para:', email);
+      console.log('📊 Detalhes da tentativa:', {
+        emailLength: email.length,
+        passwordLength: password.length,
+        emailTrimmed: email.trim(),
+        timestamp: new Date().toISOString()
+      });
       
-      // Tentar login com Supabase primeiro
+      // Login com Supabase
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim().toLowerCase(),
         password,
       });
 
       if (authError) {
-        console.log('❌ Login Supabase falhou:', authError.message);
+        console.log('❌ Login Supabase falhou:', {
+          message: authError.message,
+          status: authError.status,
+          code: authError.code,
+          name: authError.name
+        });
         
         // Verificar se é erro de email não confirmado
         if (authError.message?.includes('Email not confirmed')) {
@@ -360,16 +313,7 @@ export const AuthProvider = ({ children }) => {
         // Verificar se é erro de credenciais inválidas
         if (authError.message?.includes('Invalid login credentials') || 
             authError.message?.includes('Invalid email or password')) {
-          console.log('🔄 Tentando sistema local como fallback');
-          
-          // Tentar fallback para sistema local
-          try {
-            return await loginLocal(email, password);
-          } catch (localError) {
-            // Se o sistema local também falhar, usar a mensagem mais específica
-            console.log('❌ Sistema local também falhou:', localError.message);
-            throw localError; // Propagar o erro específico do sistema local
-          }
+          throw new Error('E-mail ou senha incorretos. Verifique suas credenciais e tente novamente.');
         }
         
         // Para outros erros do Supabase, lançar erro específico
@@ -377,6 +321,12 @@ export const AuthProvider = ({ children }) => {
       }
 
       if (authData.user) {
+        console.log('✅ Autenticação Supabase bem-sucedida:', {
+          email: authData.user.email,
+          emailConfirmed: !!authData.user.email_confirmed_at,
+          userId: authData.user.id
+        });
+        
         // Verificar se o email foi confirmado
         if (!authData.user.email_confirmed_at) {
           console.log('❌ Email não confirmado');
@@ -387,10 +337,10 @@ export const AuthProvider = ({ children }) => {
 
         // Login Supabase bem-sucedido
         const userData = await getUserProfile(authData.user);
-        console.log('✅ Login Supabase bem-sucedido, role:', userData.role);
+        console.log('✅ Login bem-sucedido, role:', userData.role);
         setUser(userData);
         
-        // Manter compatibilidade com sistema local
+        // Salvar dados no localStorage para persistência
         localStorage.setItem('token', 'supabase-session');
         localStorage.setItem('auth_user', JSON.stringify(userData));
         
@@ -404,107 +354,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Função de login local (fallback)
-  const loginLocal = async (email, password) => {
-    console.log('🔐 Tentando login local para:', email);
-    
-    // Verificar se o usuário existe na base de usuários convidados
-    const usersData = localStorage.getItem('exxata_users');
-    let invitedUsers = [];
-    
-    if (usersData) {
-      try {
-        invitedUsers = JSON.parse(usersData);
-      } catch {
-        invitedUsers = [];
-      }
-    }
-
-    // Buscar usuário convidado
-    const invitedUser = invitedUsers.find(u => 
-      u.email?.toLowerCase() === email.toLowerCase()
-    );
-
-    let userData = null;
-
-    // Usuários padrão do sistema (sempre permitidos)
-    if (email === 'admin@exxata.com' && password === 'admin123') {
-      userData = {
-        id: 1,
-        name: 'Admin',
-        email: 'admin@exxata.com',
-        role: 'admin',
-        permissions: getPermissionsByRole('admin')
-      };
-    } else if ((email === 'consultor@exxata.com' || email === 'consultant@exxata.com') && password === 'consultor123') {
-      userData = {
-        id: 2,
-        name: 'Consultor',
-        email,
-        role: 'consultor',
-        permissions: getPermissionsByRole('consultor')
-      };
-    } else if ((email === 'cliente@exxata.com' || email === 'client@exxata.com') && password === 'cliente123') {
-      userData = {
-        id: 3,
-        name: 'Cliente',
-        email,
-        role: 'cliente',
-        permissions: getPermissionsByRole('cliente')
-      };
-    } 
-    // Verificar usuários convidados
-    else if (invitedUser) {
-      // Verificar senha padrão ou senha personalizada
-      if (password === 'exxata123' || (invitedUser.password && password === invitedUser.password)) {
-        userData = {
-          id: invitedUser.id,
-          name: invitedUser.name,
-          email: invitedUser.email,
-          role: invitedUser.role,
-          permissions: getPermissionsByRole(invitedUser.role)
-        };
-
-        // Atualizar status para Ativo no primeiro login
-        if (invitedUser.status === 'Pendente') {
-          const updatedUsers = invitedUsers.map(u => 
-            u.id === invitedUser.id 
-              ? { ...u, status: 'Ativo', lastActive: new Date().toISOString() }
-              : u
-          );
-          localStorage.setItem('exxata_users', JSON.stringify(updatedUsers));
-        }
-      }
-    }
-
-    if (!userData) {
-      console.log('❌ Login local falhou para:', email);
-      
-      if (!invitedUser) {
-        // Verificar se é um dos emails padrão com senha errada
-        if (email === 'admin@exxata.com' || 
-            email === 'consultor@exxata.com' || 
-            email === 'consultant@exxata.com' ||
-            email === 'cliente@exxata.com' || 
-            email === 'client@exxata.com') {
-          console.log('❌ Email padrão encontrado, mas senha incorreta');
-          throw new Error('Senha incorreta. Verifique suas credenciais e tente novamente.');
-        }
-        console.log('❌ Email não encontrado no sistema');
-        throw new Error('E-mail não cadastrado na plataforma. Entre em contato com o administrador para receber um convite.');
-      } else {
-        console.log('❌ Usuário convidado encontrado, mas senha incorreta');
-        throw new Error('Senha incorreta. Verifique suas credenciais e tente novamente.');
-      }
-    }
-
-    console.log('✅ Login local bem-sucedido para:', email);
-
-    localStorage.setItem('token', 'local-token');
-    localStorage.setItem('auth_user', JSON.stringify(userData));
-    setUser(userData);
-    return { success: true };
-  };
 
   const logout = async () => {
     try {
@@ -612,14 +461,20 @@ export const AuthProvider = ({ children }) => {
             role: profileData.role
           });
 
-          const { error: profileError } = await supabase
-            .from('profiles')
-            .upsert(profileData);
+          // Somente tentar escrever em profiles se houver sessão (usuário autenticado)
+          if (data.session) {
+            const { error: profileError } = await supabase
+              .from('profiles')
+              .upsert(profileData);
 
-          if (profileError) {
-            console.warn('⚠️ Perfil criado, mas erro ao salvar dados adicionais:', profileError.message);
+            if (profileError) {
+              console.warn('⚠️ Perfil criado, mas erro ao salvar dados adicionais:', profileError.message);
+            } else {
+              console.log('✅ Perfil criado com sucesso na tabela profiles');
+            }
           } else {
-            console.log('✅ Perfil criado com sucesso na tabela profiles');
+            // Sem sessão após signup: o perfil será criado automaticamente pelo trigger no banco
+            console.log('ℹ️ Sem sessão após signup, perfil será criado via trigger no banco.');
           }
         } catch (profileError) {
           console.warn('⚠️ Erro ao criar perfil adicional:', profileError.message);

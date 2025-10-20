@@ -43,6 +43,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
   const [chartType, setChartType] = useState(indicator?.chart_type || 'bar');
   const [labels, setLabels] = useState(indicator?.labels?.join(', ') || '');
   const [valueFormat, setValueFormat] = useState(indicator?.options?.valueFormat || 'number');
+  const [observations, setObservations] = useState(indicator?.observations || '');
   const [datasets, setDatasets] = useState(() => formatDatasetsForForm(indicator?.datasets));
   const importInputRef = useRef(null);
 
@@ -51,6 +52,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
     setChartType(indicator?.chart_type || 'bar');
     setLabels(Array.isArray(indicator?.labels) ? indicator.labels.join(', ') : (indicator?.labels || ''));
     setValueFormat(indicator?.options?.valueFormat || 'number');
+    setObservations(indicator?.observations || '');
     
     let formattedDatasets = formatDatasetsForForm(indicator?.datasets);
     
@@ -136,6 +138,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
       ...indicator?.options,
       valueFormat
     },
+    observations: observations.trim(),
   });
 
   const addDataset = () => {
@@ -305,6 +308,16 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
       <div>
         <label className="block text-sm font-medium mb-1">Rótulos (separados por vírgula)</label>
         <input value={labels} onChange={(e) => setLabels(e.target.value)} className="w-full p-2 border rounded" placeholder="Ex: Jan, Fev, Mar"/>
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium mb-1">Observações</label>
+        <textarea 
+          value={observations} 
+          onChange={(e) => setObservations(e.target.value)} 
+          className="w-full p-2 border rounded min-h-[80px] resize-y" 
+          placeholder="Adicione observações sobre este indicador..."
+        />
       </div>
       
       <div className="space-y-3">
@@ -1434,8 +1447,19 @@ export function ProjectDetails() {
                       </div>
                     )}
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="space-y-4">
                     <IndicatorChart indicator={indicator} />
+                    {indicator.observations && (
+                      <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <FileText className="h-4 w-4 text-slate-500 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <p className="text-xs font-medium text-slate-700 mb-1">Observações</p>
+                            <p className="text-sm text-slate-600 whitespace-pre-wrap">{indicator.observations}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
