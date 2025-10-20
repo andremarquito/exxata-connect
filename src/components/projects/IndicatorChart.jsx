@@ -1,28 +1,38 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 
-const formatValue = (value, format) => {
-  if (typeof value !== 'number') return value;
-  
+const formatValue = (value, format, opts = {}) => {
+  if (typeof value !== 'number' || Number.isNaN(value)) return value;
+  const { compact = false } = opts;
+
   if (format === 'currency') {
+    const useCompact = compact || Math.abs(value) >= 1_000_000;
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      notation: useCompact ? 'compact' : 'standard',
+      compactDisplay: 'short',
+      minimumFractionDigits: useCompact ? 1 : 2,
+      maximumFractionDigits: useCompact ? 1 : 2,
     }).format(value);
-  } else if (format === 'percentage') {
+  }
+
+  if (format === 'percentage') {
     return new Intl.NumberFormat('pt-BR', {
       style: 'percent',
       minimumFractionDigits: 1,
-      maximumFractionDigits: 1
+      maximumFractionDigits: 1,
     }).format(value / 100);
-  } else {
-    return new Intl.NumberFormat('pt-BR', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2
-    }).format(value);
   }
+
+  // number padrão
+  const useCompact = compact || Math.abs(value) >= 1_000_000;
+  return new Intl.NumberFormat('pt-BR', {
+    notation: useCompact ? 'compact' : 'standard',
+    compactDisplay: 'short',
+    minimumFractionDigits: useCompact ? 1 : 0,
+    maximumFractionDigits: useCompact ? 1 : 2,
+  }).format(value);
 };
 
 const CustomTooltip = ({ active, payload, label, valueFormat }) => {
@@ -43,6 +53,7 @@ const IndicatorChart = ({ indicator }) => {
   const { chart_type, labels, datasets, options } = indicator;
   const type = chart_type; // Mantém a variável 'type' para compatibilidade interna do componente
   const valueFormat = options?.valueFormat || 'number';
+  const showDataLabels = options?.showDataLabels ?? true;
 
   const data = labels.map((label, index) => {
     const dataEntry = { name: label };
@@ -58,13 +69,15 @@ const IndicatorChart = ({ indicator }) => {
         <ResponsiveContainer>
           <BarChart data={data} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis type="number" />
+            <XAxis type="number" tickFormatter={(v) => formatValue(v, valueFormat, { compact: true })} />
             <YAxis dataKey="name" type="category" width={80} />
             <Tooltip content={<CustomTooltip valueFormat={valueFormat} />} />
             <Legend />
             {datasets.map((dataset, index) => (
               <Bar key={index} dataKey={dataset.name} fill={dataset.color || '#8884d8'}>
-                <LabelList dataKey={dataset.name} position="right" />
+                {showDataLabels && (
+                  <LabelList dataKey={dataset.name} position="right" formatter={(v) => formatValue(v, valueFormat, { compact: true })} />
+                )}
               </Bar>
             ))}
           </BarChart>
@@ -80,12 +93,14 @@ const IndicatorChart = ({ indicator }) => {
           <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="name" />
-            <YAxis />
+            <YAxis tickFormatter={(v) => formatValue(v, valueFormat, { compact: true })} />
             <Tooltip content={<CustomTooltip valueFormat={valueFormat} />} />
             <Legend />
             {datasets.map((dataset, index) => (
               <Bar key={index} dataKey={dataset.name} fill={dataset.color || '#8884d8'}>
-                <LabelList dataKey={dataset.name} position="top" />
+                {showDataLabels && (
+                  <LabelList dataKey={dataset.name} position="top" formatter={(v) => formatValue(v, valueFormat, { compact: true })} />
+                )}
               </Bar>
             ))}
           </BarChart>
@@ -101,11 +116,15 @@ const IndicatorChart = ({ indicator }) => {
           <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="name" />
-            <YAxis />
+            <YAxis tickFormatter={(v) => formatValue(v, valueFormat, { compact: true })} />
             <Tooltip content={<CustomTooltip valueFormat={valueFormat} />} />
             <Legend />
             {datasets.map((dataset, index) => (
-              <Line key={index} type="monotone" dataKey={dataset.name} stroke={dataset.color || '#8884d8'} activeDot={{ r: 8 }} />
+              <Line key={index} type="monotone" dataKey={dataset.name} stroke={dataset.color || '#8884d8'} activeDot={{ r: 8 }}>
+                {showDataLabels && (
+                  <LabelList dataKey={dataset.name} position="top" formatter={(v) => formatValue(v, valueFormat, { compact: true })} />
+                )}
+              </Line>
             ))}
           </LineChart>
         </ResponsiveContainer>
@@ -132,7 +151,13 @@ const IndicatorChart = ({ indicator }) => {
               cx="50%"
               cy="50%"
               labelLine={false}
-              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+              label={showDataLabels ? ({ name, value, percent }) => {
+                if (valueFormat === 'percentage') {
+                  return `${name} ${(percent * 100).toFixed(0)}%`;
+                }
+                const valText = formatValue(value, valueFormat, { compact: true });
+                return `${name} ${valText} (${(percent * 100).toFixed(0)}%)`;
+              } : false}
               outerRadius={80}
               fill="#8884d8"
               dataKey="value"

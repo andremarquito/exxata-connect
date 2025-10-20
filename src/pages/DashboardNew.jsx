@@ -278,10 +278,10 @@ export function Dashboard() {
               Exxata <span className="text-exxata-red">Connect</span>
             </h1>
             <p className="text-xl md:text-2xl mb-2 text-slate-200">
-              Gestão Inteligente de Projetos de Consultoria
+              Gestão Inteligente de Projetos da Exxata
             </p>
             <p className="text-lg text-slate-300">
-              Aplicando <strong>Inteligência Humana</strong> para transformar a administração de contratos em grandes empreendimentos
+              Aplicando <strong>Inteligência Humana</strong> para prever, apoiar e resolver as incertezas do seu contrato.
             </p>
           </div>
         </div>
@@ -338,16 +338,15 @@ export function Dashboard() {
           
           {/* Botão para adicionar card */}
           <Card 
-            className="bg-white/80 backdrop-blur-sm border-2 border-dashed border-slate-300 hover:border-blue-500 transition-all duration-300 rounded-2xl cursor-pointer group"
+            className="bg-white/30 backdrop-blur-sm border border-dashed border-slate-200 hover:border-slate-300 transition-all duration-200 rounded-lg cursor-pointer group h-auto"
             onClick={() => setShowAddCardModal(true)}
           >
-            <CardContent className="p-6 flex items-center justify-center h-full">
+            <CardContent className="p-3 flex items-center justify-center">
               <div className="text-center">
-                <div className="p-3 bg-slate-100 group-hover:bg-blue-100 rounded-xl mb-4 mx-auto w-fit transition-colors">
-                  <Plus className="h-6 w-6 text-slate-500 group-hover:text-blue-600 transition-colors" />
+                <div className="p-1.5 bg-slate-50 group-hover:bg-slate-100 rounded-md mb-1 mx-auto w-fit transition-colors">
+                  <Plus className="h-3 w-3 text-slate-400 group-hover:text-slate-500 transition-colors" />
                 </div>
-                <p className="text-sm font-medium text-slate-600 group-hover:text-blue-600 transition-colors">Adicionar Card</p>
-                <p className="text-xs text-slate-500">Personalize seu dashboard</p>
+                <p className="text-[10px] font-medium text-slate-400 group-hover:text-slate-500 transition-colors">Adicionar</p>
               </div>
             </CardContent>
           </Card>

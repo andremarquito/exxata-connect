@@ -12,7 +12,7 @@ import {
   BarChart3, Clock, CheckCircle, AlertCircle, TrendingUp, Brain, 
   Download, Upload, Search, Zap, Target, Shield, ArrowLeft, Settings, UserPlus, FilePlus2,
   Image, File, Table, Trash2, PieChart, LineChart, Plus, Edit3, Palette, X, GripVertical, Copy, Camera,
-  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical
+  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjects } from '@/contexts/ProjectsContext';
@@ -21,6 +21,8 @@ import { useState, useEffect, useRef } from 'react';
 import OverviewGrid from '@/components/projects/OverviewGridSimple';
 import IndicatorsTab from '@/components/projects/IndicatorsTab';
 import * as XLSX from 'xlsx';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 // Componente do Modal para Adicionar/Editar Indicador
 const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
@@ -46,6 +48,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
   const [observations, setObservations] = useState(indicator?.observations || '');
   const [datasets, setDatasets] = useState(() => formatDatasetsForForm(indicator?.datasets));
   const importInputRef = useRef(null);
+  const [showDataLabels, setShowDataLabels] = useState(indicator?.options?.showDataLabels ?? true);
 
   useEffect(() => {
     setTitle(indicator?.title || '');
@@ -53,6 +56,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
     setLabels(Array.isArray(indicator?.labels) ? indicator.labels.join(', ') : (indicator?.labels || ''));
     setValueFormat(indicator?.options?.valueFormat || 'number');
     setObservations(indicator?.observations || '');
+    setShowDataLabels(indicator?.options?.showDataLabels ?? true);
     
     let formattedDatasets = formatDatasetsForForm(indicator?.datasets);
     
@@ -126,6 +130,54 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
     setDatasets(newDatasets);
   };
 
+  const getValuesArray = (ds) => Array.isArray(ds.values)
+    ? [...ds.values]
+    : (typeof ds.values === 'string'
+      ? ds.values.split(',').map(v => parseFloat(v.trim()) || 0)
+      : []);
+
+  const labelsArray = labels.split(',').map(l => l.trim()).filter(Boolean);
+
+  const addLabelRow = () => {
+    const nextLabel = `Rótulo ${labelsArray.length + 1}`;
+    const newLabels = [...labelsArray, nextLabel];
+    setLabels(newLabels.join(', '));
+    setDatasets(prev => prev.map(ds => {
+      const vals = getValuesArray(ds);
+      return { ...ds, values: [...vals, 0] };
+    }));
+  };
+
+  const removeLabelRow = (rowIdx) => {
+    if (rowIdx < 0 || rowIdx >= labelsArray.length) return;
+    const newLabels = labelsArray.filter((_, i) => i !== rowIdx);
+    setLabels(newLabels.join(', '));
+    setDatasets(prev => prev.map(ds => {
+      const vals = getValuesArray(ds);
+      const newVals = vals.filter((_, i) => i !== rowIdx);
+      return { ...ds, values: newVals };
+    }));
+  };
+
+  const updateLabelAtIndex = (rowIdx, value) => {
+    const newLabels = [...labelsArray];
+    newLabels[rowIdx] = value;
+    setLabels(newLabels.join(', '));
+  };
+
+  const updateCellValue = (dsIdx, rowIdx, value) => {
+    setDatasets(prev => {
+      const copy = [...prev];
+      const ds = { ...copy[dsIdx] };
+      const vals = getValuesArray(ds);
+      while (vals.length < Math.max(labelsArray.length, rowIdx + 1)) vals.push(0);
+      vals[rowIdx] = parseFloat(value) || 0;
+      ds.values = vals;
+      copy[dsIdx] = ds;
+      return copy;
+    });
+  };
+
   const buildFormData = () => ({
     title: title.trim(),
     chart_type: chartType,
@@ -136,7 +188,8 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
     })),
     options: {
       ...indicator?.options,
-      valueFormat
+      valueFormat,
+      showDataLabels
     },
     observations: observations.trim(),
   });
@@ -305,6 +358,16 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
           <option value="percentage">Percentual (45,6%)</option>
         </select>
       </div>
+      <div className="flex items-center gap-2">
+        <input
+          id="showDataLabels"
+          type="checkbox"
+          className="h-4 w-4"
+          checked={showDataLabels}
+          onChange={(e) => setShowDataLabels(e.target.checked)}
+        />
+        <label htmlFor="showDataLabels" className="text-sm font-medium">Exibir rótulos de dados</label>
+      </div>
       <div>
         <label className="block text-sm font-medium mb-1">Rótulos (separados por vírgula)</label>
         <input value={labels} onChange={(e) => setLabels(e.target.value)} className="w-full p-2 border rounded" placeholder="Ex: Jan, Fev, Mar"/>
@@ -356,23 +419,78 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
             ))}
           </div>
         ) : (
-          // Para outros tipos de gráfico, mostrar datasets normais
           <>
-            {datasets.map((ds, index) => (
-              <div key={index} className="p-3 border rounded space-y-2 relative">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <input value={ds.name} onChange={(e) => handleDatasetChange(index, 'name', e.target.value)} placeholder="Nome da Série" className="p-2 border rounded" />
-                  <input value={ds.values} onChange={(e) => handleDatasetChange(index, 'values', e.target.value)} placeholder="Valores (ex: 10,20,30)" className="p-2 border rounded" />
-                  <input type="color" value={ds.color} onChange={(e) => handleDatasetChange(index, 'color', e.target.value)} className="p-1 h-10 w-full border rounded" />
-                </div>
-                {datasets.length > 1 && (
-                  <button onClick={() => removeDataset(index)} className="absolute top-2 right-2 text-red-500 hover:text-red-700">
-                    <Trash2 size={18} />
-                  </button>
-                )}
-              </div>
-            ))}
-            <Button variant="outline" size="sm" onClick={addDataset}>Adicionar Série</Button>
+            <div className="overflow-auto border rounded">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr>
+                    <th className="p-2 border w-48 text-left">Rótulo</th>
+                    {datasets.map((ds, index) => (
+                      <th key={index} className="p-2 border text-left">
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={ds.name}
+                            onChange={(e) => handleDatasetChange(index, 'name', e.target.value)}
+                            placeholder={`Série ${index + 1}`}
+                            className="p-1 border rounded w-full"
+                          />
+                          <input
+                            type="color"
+                            value={ds.color || '#8884d8'}
+                            onChange={(e) => handleDatasetChange(index, 'color', e.target.value)}
+                            className="h-8 w-10 border rounded"
+                          />
+                          {datasets.length > 1 && (
+                            <button onClick={() => removeDataset(index)} className="text-red-500 hover:text-red-700 text-xs">Remover</button>
+                          )}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {labelsArray.length === 0 ? (
+                    <tr>
+                      <td className="p-3 border text-slate-500" colSpan={1 + datasets.length}>Nenhum rótulo. Adicione linhas abaixo.</td>
+                    </tr>
+                  ) : (
+                    labelsArray.map((lbl, rowIdx) => (
+                      <tr key={rowIdx}>
+                        <td className="p-2 border">
+                          <div className="flex items-center gap-2">
+                            <input
+                              value={lbl}
+                              onChange={(e) => updateLabelAtIndex(rowIdx, e.target.value)}
+                              className="w-full p-1 border rounded"
+                            />
+                            <button onClick={() => removeLabelRow(rowIdx)} className="text-red-500 hover:text-red-700 text-xs">Remover</button>
+                          </div>
+                        </td>
+                        {datasets.map((ds, dsIdx) => {
+                          const vals = getValuesArray(ds);
+                          const val = typeof vals[rowIdx] === 'number' ? vals[rowIdx] : parseFloat(vals[rowIdx]) || 0;
+                          return (
+                            <td key={`${rowIdx}-${dsIdx}`} className="p-2 border">
+                              <input
+                                type="number"
+                                step="0.01"
+                                className="w-full p-1 border rounded"
+                                value={val}
+                                onChange={(e) => updateCellValue(dsIdx, rowIdx, e.target.value)}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2">
+              <Button variant="outline" size="sm" onClick={addLabelRow}>Adicionar Linha</Button>
+              <Button variant="outline" size="sm" onClick={addDataset}>Adicionar Série</Button>
+            </div>
           </>
         )}
       </div>
@@ -402,6 +520,8 @@ export function ProjectDetails() {
   const [loadedProjectMembers, setLoadedProjectMembers] = useState([]);
   const [showIndicatorModal, setShowIndicatorModal] = useState(false);
   const [editingIndicator, setEditingIndicator] = useState(null);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const indicatorsContainerRef = useRef(null);
 
   // Filtros do Gantt
   const [activityStatus, setActivityStatus] = useState('all');
@@ -415,6 +535,7 @@ export function ProjectDetails() {
   const [editingActivity, setEditingActivity] = useState(null);
   const [editingField, setEditingField] = useState(null);
   const [dragOverConductId, setDragOverConductId] = useState(null);
+  const [conductSortOrder, setConductSortOrder] = useState('none'); // 'none', 'asc', 'desc'
 
   // Projeto vindo do contexto (persistido em localStorage)
   const { 
@@ -1058,6 +1179,551 @@ export function ProjectDetails() {
     }
   };
 
+  const handleExportPDF = async () => {
+    const indicators = project?.project_indicators || [];
+    const conducts = Array.isArray(project?.conducts) ? project.conducts : [];
+    const predictiveText = project?.aiPredictiveText || '';
+
+    if (indicators.length === 0 && conducts.length === 0 && !predictiveText) {
+      alert('Não há conteúdo para exportar.');
+      return;
+    }
+
+    setIsExportingPDF(true);
+
+    try {
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 20;
+      const contentWidth = pageWidth - (2 * margin);
+      
+      // Cores da marca Exxata
+      const exxataRed = [213, 29, 7]; // #d51d07
+      const exxataNavy = [9, 24, 43]; // #09182b
+      const lightGray = [248, 250, 252];
+      const darkGray = [71, 85, 105];
+      const textGray = [100, 116, 139];
+      const subtleGray = [226, 232, 240];
+
+      // Util: carregar imagem como DataURL (base64)
+      const loadImageAsDataURL = async (src) => {
+        try {
+          const res = await fetch(src, { cache: 'no-store' });
+          if (!res.ok) return null;
+          const blob = await res.blob();
+          return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } catch (_) {
+          return null;
+        }
+      };
+
+      // Carregar logo oficial (localizado em public/)
+      const logoUrl = '/Assinatura-de-Marca---Exxata_01.png';
+      const logoDataUrl = await loadImageAsDataURL(logoUrl);
+
+      // Função para adicionar cabeçalho em cada página
+      const addHeader = (pageNum, totalPages, logo) => {
+        // Faixa superior cinza claro para maior legibilidade
+        pdf.setFillColor(...lightGray);
+        pdf.rect(0, 0, pageWidth, 18, 'F');
+
+        // Linha inferior sutil
+        pdf.setDrawColor(...subtleGray);
+        pdf.setLineWidth(0.6);
+        pdf.line(0, 18, pageWidth, 18);
+
+        // Logo (se disponível) ou fallback em texto
+        if (logo) {
+          try {
+            const logoH = 10;
+            const logoW = 26; // proporção aproximada
+            pdf.addImage(logo, 'PNG', pageWidth - margin - logoW, 4, logoW, logoH);
+          } catch (_) {
+            // fallback silencioso
+          }
+        } else {
+          pdf.setFontSize(16);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(...exxataNavy);
+          pdf.text('EXXATA', pageWidth - margin - 40, 11);
+        }
+
+        // Título da seção/cabeçalho
+        pdf.setFontSize(11);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(...exxataNavy);
+        pdf.text('Exxata Engenharia', margin, 9);
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(...darkGray);
+        pdf.text('Atitude imediata. Resultados notáveis.', margin, 14);
+
+        // Número da página
+        pdf.setFontSize(8);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(...textGray);
+        pdf.text(`Página ${pageNum} de ${totalPages}`, pageWidth - margin - 20, 14);
+      };
+
+      // Função para adicionar rodapé elegante com logo e slogan
+      const addFooter = (logo) => {
+        // Área de endereços
+        const footerY = pageHeight - 32;
+        pdf.setDrawColor(...subtleGray);
+        pdf.setLineWidth(0.6);
+        pdf.line(margin, footerY, pageWidth - margin, footerY);
+
+        pdf.setFontSize(7);
+        pdf.setTextColor(...darkGray);
+        pdf.setFont('helvetica', 'bold');
+
+        // Belo Horizonte (badge cinza claro)
+        pdf.setFillColor(...subtleGray);
+        pdf.roundedRect(margin, footerY + 3, 37, 4.5, 1, 1, 'F');
+        pdf.setTextColor(...exxataNavy);
+        pdf.text('Belo Horizonte/MG', margin + 2, footerY + 6);
+
+        pdf.setTextColor(...textGray);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(6.5);
+        const bhText = 'Av. Getúlio Vargas, n° 671, 10° Andar, Funcionários, Belo Horizonte/MG';
+        pdf.text(bhText, margin, footerY + 11);
+
+        // São Paulo (badge cinza claro)
+        pdf.setFillColor(...subtleGray);
+        pdf.roundedRect(margin, footerY + 14, 28, 4.5, 1, 1, 'F');
+        pdf.setTextColor(...exxataNavy);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(7);
+        pdf.text('São Paulo/SP', margin + 2, footerY + 17);
+
+        pdf.setTextColor(...textGray);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(6.5);
+        const spText = 'Avenida Engenheiro Luiz Carlos Berrini, n° 105. Ed. Thera Berrini Office, Brooklin, Sala 111, São Paulo/SP';
+        pdf.text(spText, margin, footerY + 22);
+
+        // Faixa inferior cinza claro com logo central
+        const bandH = 12;
+        pdf.setFillColor(...lightGray);
+        pdf.rect(0, pageHeight - bandH, pageWidth, bandH, 'F');
+
+        if (logo) {
+          try {
+            const logoH = 8;
+            const logoW = 21;
+            const logoX = (pageWidth - logoW) / 2;
+            const logoY = pageHeight - bandH + 2;
+            pdf.addImage(logo, 'PNG', logoX, logoY, logoW, logoH);
+          } catch (_) { /* noop */ }
+        } else {
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(10);
+          pdf.setTextColor(...exxataNavy);
+          const t = 'EXXATA';
+          const tw = pdf.getTextWidth(t);
+          pdf.text(t, (pageWidth - tw) / 2, pageHeight - 4);
+        }
+      };
+
+      let currentPage = 1;
+      let yPosition = 30; // Começar após o cabeçalho com respiro maior
+
+      // Título principal do documento
+      pdf.setFontSize(24);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(...exxataNavy);
+      pdf.text('Relatório do Projeto', margin, yPosition);
+      yPosition += 12;
+
+      // Nome do projeto com destaque
+      pdf.setFillColor(...lightGray);
+      pdf.roundedRect(margin, yPosition - 5, contentWidth, 14, 2, 2, 'F');
+      
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(...exxataNavy);
+      pdf.text(project?.name || 'Sem nome', margin + 5, yPosition + 4);
+      yPosition += 16;
+
+      // Informações do projeto em cards
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(...darkGray);
+      
+      const exportDate = new Date().toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      // Card de informações
+      const infoBoxY = yPosition;
+      pdf.setDrawColor(...exxataRed);
+      pdf.setLineWidth(0.5);
+      pdf.line(margin, infoBoxY, margin + 3, infoBoxY);
+      
+      pdf.setTextColor(...textGray);
+      pdf.text(`Data de Exportação: ${exportDate}`, margin + 5, infoBoxY + 1);
+      pdf.text(`Total de Indicadores: ${indicators.length}`, margin + 5, infoBoxY + 6);
+      
+      if (project?.client) {
+        pdf.text(`Cliente: ${project.client}`, margin + 5, infoBoxY + 11);
+        yPosition += 18;
+      } else {
+        yPosition += 13;
+      }
+
+      yPosition += 5;
+
+      // Sumário do relatório
+      pdf.setFillColor(255, 255, 255);
+      pdf.setDrawColor(...textGray);
+      pdf.setLineWidth(0.4);
+      pdf.roundedRect(margin, yPosition, contentWidth, 24, 2, 2, 'FD');
+      
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(...exxataNavy);
+      pdf.text('Conteúdo do Relatório:', margin + 5, yPosition + 5);
+      
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8);
+      pdf.setTextColor(...darkGray);
+      
+      let summaryY = yPosition + 12;
+      if (indicators.length > 0) {
+        pdf.setFillColor(...exxataRed);
+        pdf.circle(margin + 7, summaryY - 1, 1, 'F');
+        pdf.text(`Indicadores (${indicators.length})`, margin + 11, summaryY);
+        summaryY += 4;
+      }
+      if (conducts.length > 0) {
+        pdf.setFillColor(...exxataRed);
+        pdf.circle(margin + 7, summaryY - 1, 1, 'F');
+        pdf.text(`Condutas (${conducts.length})`, margin + 11, summaryY);
+        summaryY += 4;
+      }
+      if (predictiveText) {
+        pdf.setFillColor(...exxataRed);
+        pdf.circle(margin + 7, summaryY - 1, 1, 'F');
+        pdf.text('Inteligência Preditiva', margin + 11, summaryY);
+      }
+
+      yPosition += 34;
+
+      // Linha divisória elegante
+      pdf.setDrawColor(...subtleGray);
+      pdf.setLineWidth(0.6);
+      pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+      yPosition += 10;
+
+      // Adicionar cabeçalho e rodapé na primeira página
+      const totalPages = indicators.length + 1; // Estimativa
+      addHeader(currentPage, totalPages, logoDataUrl);
+      addFooter(logoDataUrl);
+
+      // ========== SEÇÃO: INDICADORES ==========
+      if (indicators.length > 0) {
+        // Título da seção Indicadores (se houver outras seções)
+        if (conducts.length > 0 || predictiveText) {
+          pdf.setFontSize(20);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(...exxataNavy);
+          pdf.text('Indicadores', margin, yPosition);
+          yPosition += 8;
+
+          // Linha divisória
+          pdf.setDrawColor(...subtleGray);
+          pdf.setLineWidth(0.6);
+          pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+          yPosition += 10;
+        }
+
+        // Capturar cada gráfico
+        const chartCards = indicatorsContainerRef.current?.querySelectorAll('.chart-card');
+        
+        if (!chartCards || chartCards.length === 0) {
+          alert('Erro ao capturar os gráficos. Tente novamente.');
+          setIsExportingPDF(false);
+          return;
+        }
+
+        for (let i = 0; i < chartCards.length; i++) {
+        const card = chartCards[i];
+        const indicator = indicators[i];
+        
+        // Verificar se precisa de nova página antes do título
+        if (yPosition > pageHeight - 80) {
+          pdf.addPage();
+          currentPage++;
+          yPosition = 25;
+          addHeader(currentPage, totalPages, logoDataUrl);
+          addFooter(logoDataUrl);
+        }
+
+        // Título do indicador com número (badge minimalista)
+        pdf.setFontSize(12);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(...exxataNavy);
+
+        const drawIndexBadge = (index, cx, cy) => {
+          const r = 4;
+          pdf.setLineWidth(0.8);
+          pdf.setDrawColor(...exxataRed);
+          pdf.setFillColor(255, 255, 255);
+          pdf.circle(cx, cy, r, 'FD');
+          const label = String(index);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(9);
+          pdf.setTextColor(...exxataRed);
+          const tw = pdf.getTextWidth(label);
+          pdf.text(label, cx - tw / 2, cy + 1.5);
+        };
+
+        drawIndexBadge(i + 1, margin + 5, yPosition - 2);
+        // Nome do indicador
+        pdf.setTextColor(...exxataNavy);
+        pdf.setFontSize(12);
+        pdf.text(indicator.title, margin + 14, yPosition);
+        yPosition += 8;
+
+        // Capturar o card como imagem
+        const canvas = await html2canvas(card, {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff'
+        });
+
+        const imgData = canvas.toDataURL('image/png');
+        const imgWidth = contentWidth;
+        const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+        // Verificar se precisa de nova página para o gráfico
+        if (yPosition + imgHeight > pageHeight - 25) {
+          pdf.addPage();
+          currentPage++;
+          yPosition = 25;
+          addHeader(currentPage, totalPages, logoDataUrl);
+          addFooter(logoDataUrl);
+        }
+
+        // Box com sombra para o gráfico
+        pdf.setFillColor(255, 255, 255);
+        pdf.setDrawColor(...subtleGray);
+        pdf.setLineWidth(0.3);
+        pdf.roundedRect(margin - 2, yPosition - 2, contentWidth + 4, imgHeight + 4, 2, 2, 'FD');
+
+        // Adicionar imagem ao PDF
+        pdf.addImage(imgData, 'PNG', margin, yPosition, imgWidth, imgHeight);
+        yPosition += imgHeight + 8;
+
+        // Adicionar observações se existirem
+        if (indicator?.observations) {
+          if (yPosition + 25 > pageHeight - 25) {
+            pdf.addPage();
+            currentPage++;
+            yPosition = 25;
+            addHeader(currentPage, totalPages, logoDataUrl);
+            addFooter(logoDataUrl);
+          }
+
+          // Box de observações com estilo
+          pdf.setFillColor(252, 252, 253);
+          pdf.setDrawColor(...exxataRed);
+          pdf.setLineWidth(0.5);
+          
+          const obsLines = pdf.splitTextToSize(indicator.observations, contentWidth - 12);
+          const obsHeight = (obsLines.length * 4) + 8;
+          
+          pdf.roundedRect(margin, yPosition, contentWidth, obsHeight, 2, 2, 'FD');
+          
+          // Ícone de observação (simulado)
+          pdf.setFillColor(...exxataRed);
+          pdf.circle(margin + 4, yPosition + 4, 1.5, 'F');
+          
+          // Título "Observações"
+          pdf.setFontSize(9);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setTextColor(...exxataNavy);
+          pdf.text('Observações:', margin + 8, yPosition + 5);
+          
+          // Texto das observações
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(8);
+          pdf.setTextColor(...darkGray);
+          pdf.text(obsLines, margin + 6, yPosition + 10);
+          
+          yPosition += obsHeight + 8;
+        }
+
+        // Espaçamento entre indicadores
+        yPosition += 5;
+        }
+      }
+
+      // ========== SEÇÃO: CONDUTAS ==========
+      if (conducts.length > 0) {
+        // Verificar se precisa de nova página
+        if (yPosition > pageHeight - 100) {
+          pdf.addPage();
+          currentPage++;
+          yPosition = 25;
+          addHeader(currentPage, totalPages, logoDataUrl);
+          addFooter(logoDataUrl);
+        }
+
+        // Título da seção Condutas
+        yPosition += 10;
+        pdf.setFontSize(20);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(...exxataNavy);
+        pdf.text('Condutas', margin, yPosition);
+        yPosition += 8;
+
+        // Linha divisória
+        pdf.setDrawColor(...exxataRed);
+        pdf.setLineWidth(1);
+        pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+        yPosition += 10;
+
+        // Ordenar condutas por urgência
+        const urgencyOrder = { 'Crise': 5, 'Complexo': 4, 'Complicado': 3, 'Difícil': 2, 'Fácil': 1, 'Normal': 0 };
+        const sortedConducts = [...conducts].sort((a, b) => 
+          (urgencyOrder[b.urgency] || 0) - (urgencyOrder[a.urgency] || 0)
+        );
+
+        // Cores por urgência
+        const urgencyColors = {
+          'Crise': [220, 38, 38],
+          'Complexo': [234, 88, 12],
+          'Complicado': [234, 179, 8],
+          'Difícil': [59, 130, 246],
+          'Fácil': [34, 197, 94],
+          'Normal': [100, 116, 139]
+        };
+
+        for (let i = 0; i < sortedConducts.length; i++) {
+          const conduct = sortedConducts[i];
+          const urgencyColor = urgencyColors[conduct.urgency] || textGray;
+
+          // Verificar espaço
+          if (yPosition > pageHeight - 50) {
+            pdf.addPage();
+            currentPage++;
+            yPosition = 25;
+            addHeader(currentPage, totalPages, logoDataUrl);
+            addFooter(logoDataUrl);
+          }
+
+          // Badge de urgência
+          pdf.setFillColor(...urgencyColor);
+          const badgeWidth = pdf.getTextWidth(conduct.urgency) + 6;
+          pdf.roundedRect(margin, yPosition - 3, badgeWidth, 5, 1, 1, 'F');
+          pdf.setTextColor(255, 255, 255);
+          pdf.setFontSize(7);
+          pdf.setFont('helvetica', 'bold');
+          pdf.text(conduct.urgency, margin + 3, yPosition);
+
+          // Número da conduta
+          pdf.setTextColor(...darkGray);
+          pdf.setFont('helvetica', 'normal');
+          pdf.text(`#${i + 1}`, margin + badgeWidth + 5, yPosition);
+          yPosition += 6;
+
+          // Texto da conduta
+          const conductLines = pdf.splitTextToSize(conduct.text || 'Sem descrição', contentWidth - 6);
+          const conductHeight = (conductLines.length * 4.5) + 8;
+
+          pdf.setFillColor(255, 255, 255);
+          pdf.setDrawColor(...lightGray);
+          pdf.setLineWidth(0.3);
+          pdf.roundedRect(margin, yPosition, contentWidth, conductHeight, 2, 2, 'FD');
+
+          pdf.setFontSize(9);
+          pdf.setTextColor(...darkGray);
+          pdf.text(conductLines, margin + 3, yPosition + 5);
+
+          yPosition += conductHeight + 6;
+        }
+      }
+
+      // ========== SEÇÃO: INTELIGÊNCIA PREDITIVA ==========
+      if (predictiveText) {
+        // Verificar se precisa de nova página
+        if (yPosition > pageHeight - 100) {
+          pdf.addPage();
+          currentPage++;
+          yPosition = 25;
+          addHeader(currentPage, totalPages, logoDataUrl);
+          addFooter(logoDataUrl);
+        }
+
+        // Título da seção
+        yPosition += 10;
+        pdf.setFontSize(20);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(...exxataNavy);
+        pdf.text('Inteligência Preditiva', margin, yPosition);
+        yPosition += 8;
+
+        // Linha divisória
+        pdf.setDrawColor(...exxataRed);
+        pdf.setLineWidth(1);
+        pdf.line(margin, yPosition, pageWidth - margin, yPosition);
+        yPosition += 10;
+
+        // Box de conteúdo
+        const predictiveLines = pdf.splitTextToSize(predictiveText, contentWidth - 8);
+        const predictiveHeight = (predictiveLines.length * 4.5) + 12;
+
+        // Verificar se cabe na página
+        if (yPosition + predictiveHeight > pageHeight - 30) {
+          pdf.addPage();
+          currentPage++;
+          yPosition = 25;
+          addHeader(currentPage, totalPages, logoDataUrl);
+          addFooter(logoDataUrl);
+        }
+
+        // Box com gradiente simulado
+        pdf.setFillColor(239, 246, 255); // Azul claro
+        pdf.setDrawColor(59, 130, 246); // Azul
+        pdf.setLineWidth(0.5);
+        pdf.roundedRect(margin, yPosition, contentWidth, predictiveHeight, 3, 3, 'FD');
+
+        // Ícone decorativo
+        pdf.setFillColor(59, 130, 246);
+        pdf.circle(margin + 5, yPosition + 6, 2, 'F');
+
+        // Texto
+        pdf.setFontSize(9);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(...darkGray);
+        pdf.text(predictiveLines, margin + 4, yPosition + 8);
+      }
+
+      // Salvar o PDF
+      const fileName = `Exxata_Relatorio_${project?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'projeto'}_${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(fileName);
+
+    } catch (error) {
+      console.error('Erro ao exportar PDF:', error);
+      alert('Erro ao exportar PDF. Tente novamente.');
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
   // Funções para export/import de atividades
   const handleExportActivities = () => {
     try {
@@ -1375,34 +2041,10 @@ export function ProjectDetails() {
             </Button>
           )}
 
-          {activeTab === 'indicators' && (
-            <div className="flex gap-2">
-              {canEdit && (
-                <Button onClick={() => { setEditingIndicator(null); setShowIndicatorModal(true); }} size="sm" className="gap-1">
-                  <Plus className="h-4 w-4" />
-                  Incluir gráfico
-                </Button>
-              )}
-              <Button onClick={handleExportIndicators} variant="outline" size="sm" className="gap-1">
-                <Download className="h-4 w-4" />
-                Exportar Excel
-              </Button>
-              <Button onClick={handleImportIndicators} variant="outline" size="sm" className="gap-1">
-                <Upload className="h-4 w-4" />
-                Importar Excel
-              </Button>
-              <input
-                id="indicator-import-input"
-                type="file"
-                accept=".xlsx,.xls"
-                className="hidden"
-                onChange={handleImportFileChange}
-              />
-            </div>
-          )}
+          {activeTab === 'indicators' && null}
         </div>
 
-        <TabsContent value="overview" className="space-y-4">
+        <TabsContent value="overview" className="space-y-4 pl-4">
           <OverviewGrid 
             project={project} 
             user={user} 
@@ -1414,9 +2056,38 @@ export function ProjectDetails() {
         </TabsContent>
 
         {/* INDICADORES */}
-        <TabsContent value="indicators" className="space-y-4">
+        <TabsContent value="indicators" className="space-y-4 pl-4">
+          <div className="flex gap-2 mb-3">
+            {canEdit && (
+              <Button onClick={() => { setEditingIndicator(null); setShowIndicatorModal(true); }} size="sm" className="gap-1">
+                <Plus className="h-4 w-4" />
+                Incluir gráfico
+              </Button>
+            )}
+            {project?.project_indicators && project.project_indicators.length > 0 && (
+              <Button onClick={handleExportPDF} variant="outline" size="sm" className="gap-1" disabled={isExportingPDF}>
+                <FileDown className="h-4 w-4" />
+                {isExportingPDF ? 'Exportando...' : 'Exportar PDF'}
+              </Button>
+            )}
+            <Button onClick={handleExportIndicators} variant="outline" size="sm" className="gap-1">
+              <Download className="h-4 w-4" />
+              Exportar Excel
+            </Button>
+            <Button onClick={handleImportIndicators} variant="outline" size="sm" className="gap-1">
+              <Upload className="h-4 w-4" />
+              Importar Excel
+            </Button>
+            <input
+              id="indicator-import-input"
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleImportFileChange}
+            />
+          </div>
           {project?.project_indicators && project.project_indicators.length > 0 ? (
-            <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+            <div ref={indicatorsContainerRef} className="grid gap-6 grid-cols-1 lg:grid-cols-2">
               {canEdit && (
                 <Card className="border-dashed border-2 flex items-center justify-center min-h-[220px]">
                   <CardContent className="flex flex-col items-center justify-center gap-3 text-center">
@@ -1429,7 +2100,7 @@ export function ProjectDetails() {
                 </Card>
               )}
               {project.project_indicators.map(indicator => (
-                <Card key={indicator.id}>
+                <Card key={indicator.id} className="chart-card">
                   <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle>{indicator.title}</CardTitle>
                     {canEdit && (
@@ -1528,7 +2199,7 @@ export function ProjectDetails() {
         </TabsContent>
 
         {/* ... */}
-        <TabsContent value="documents">
+        <TabsContent value="documents" className="pl-4">
           {(() => {
             const allFiles = Array.isArray(project.files) ? project.files : [];
             const qClient = searchClient.trim().toLowerCase();
@@ -1679,7 +2350,7 @@ export function ProjectDetails() {
           })()}
         </TabsContent>
 
-        <TabsContent value="team">
+        <TabsContent value="team" className="pl-4">
           {showAddMember && (
             <div className="fixed inset-0 z-40 flex items-center justify-center">
               <div className="absolute inset-0 bg-black/30" onClick={() => setShowAddMember(false)} />
@@ -1789,7 +2460,7 @@ export function ProjectDetails() {
           </Card>
         </TabsContent>
  
-        <TabsContent value="activities">
+        <TabsContent value="activities" className="pl-4">
           <Card className="bg-white border border-slate-200 shadow-sm">
             <CardHeader>
               <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -2240,7 +2911,7 @@ export function ProjectDetails() {
         </TabsContent>
 
         {/* PANORAMA ATUAL */}
-        <TabsContent value="panorama">
+        <TabsContent value="panorama" className="pl-4">
           <div className="grid gap-4 md:grid-cols-3">
             {[
               { key: 'tecnica', title: 'Aspectos de Ordem Técnica' },
@@ -2253,17 +2924,25 @@ export function ProjectDetails() {
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-base">{title}</CardTitle>
-                      <div className="flex items-center gap-2">
-                        {['green','yellow','red'].map(color => (
-                          <button
-                            key={color}
-                            title={color === 'green' ? 'Verde' : color === 'yellow' ? 'Amarelo' : 'Vermelho'}
-                            className={`h-5 w-5 rounded-full border-2 ${statusDotClass(color)} ${section.status===color? 'ring-2 ring-offset-2 ring-slate-300': 'border-slate-300'} ${canManageInsights ? 'cursor-pointer hover:scale-110 transition-transform' : 'cursor-default'}`}
-                            onClick={() => canManageInsights && updatePanoramaStatus(project.id, key, color)}
-                            disabled={!canManageInsights}
+                      {canManageInsights ? (
+                        <div className="flex items-center gap-2">
+                          {['green','yellow','red'].map(color => (
+                            <button
+                              key={color}
+                              title={color === 'green' ? 'Verde' : color === 'yellow' ? 'Amarelo' : 'Vermelho'}
+                              className={`h-5 w-5 rounded-full border-2 ${statusDotClass(color)} ${section.status===color? 'ring-2 ring-offset-2 ring-slate-300': 'border-slate-300'} cursor-pointer hover:scale-110 transition-transform`}
+                              onClick={() => updatePanoramaStatus(project.id, key, color)}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`h-6 w-6 rounded-full border-2 ${statusDotClass(section.status)}`}
+                            title={section.status === 'green' ? 'Verde' : section.status === 'yellow' ? 'Amarelo' : 'Vermelho'}
                           />
-                        ))}
-                      </div>
+                        </div>
+                      )}
                     </div>
                   </CardHeader>
                   <CardContent>
@@ -2308,7 +2987,7 @@ export function ProjectDetails() {
           </div>
         </TabsContent>
 
-        <TabsContent value="ai-insights">
+        <TabsContent value="ai-insights" className="pl-4">
           <div className="grid gap-4 md:grid-cols-2">
             {/* Análise Preditiva */}
             <Card>
@@ -2322,7 +3001,7 @@ export function ProjectDetails() {
                 {canManageInsights ? (
                   <div className="space-y-2">
                     <textarea
-                      defaultValue={project.aiPredictiveText || 'Com base na experiência Exxata, o projeto tem 85% de probabilidade de ser concluído dentro do prazo, com redução de 40% no risco de pleitos contratuais em obras de infraestrutura.'}
+                      defaultValue={project.aiPredictiveText || ''}
                       onBlur={(e) => handlePredictiveTextBlur(e.target.value)}
                       className="w-full min-h-[120px] border border-slate-200 rounded-md p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Digite a análise preditiva aqui"
@@ -2331,7 +3010,7 @@ export function ProjectDetails() {
                   </div>
                 ) : (
                   <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-                    <p className="text-sm text-blue-800 whitespace-pre-wrap">{project.aiPredictiveText || 'Com base na experiência Exxata, o projeto tem 85% de probabilidade de ser concluído dentro do prazo, com redução de 40% no risco de pleitos contratuais em obras de infraestrutura.'}</p>
+                    <p className="text-sm text-blue-800 whitespace-pre-wrap">{project.aiPredictiveText || 'Nenhuma análise preditiva disponível.'}</p>
                   </div>
                 )}
               </CardContent>
@@ -2352,13 +3031,40 @@ export function ProjectDetails() {
                 <div className="border rounded-lg overflow-hidden">
                   <div className="bg-muted/50 px-3 py-2 text-xs font-medium text-slate-600 grid grid-cols-12">
                     <div className="col-span-9">Conduta</div>
-                    <div className="col-span-3">Urgência</div>
+                    <div 
+                      className="col-span-3 flex items-center gap-1 cursor-pointer hover:text-slate-900"
+                      onClick={() => {
+                        setConductSortOrder(prev => 
+                          prev === 'none' ? 'asc' : 
+                          prev === 'asc' ? 'desc' : 
+                          'none'
+                        );
+                      }}
+                    >
+                      Urgência
+                      {conductSortOrder === 'asc' && <ChevronUp className="h-3 w-3" />}
+                      {conductSortOrder === 'desc' && <ChevronDown className="h-3 w-3" />}
+                    </div>
                   </div>
                   <div className="max-h-80 overflow-y-auto">
                     {(!Array.isArray(project.conducts) || project.conducts.length === 0) ? (
                       <div className="px-3 py-4 text-sm text-slate-500">Nenhuma conduta cadastrada.</div>
                     ) : (
-                      project.conducts.map((c) => (
+                      (() => {
+                        const urgencyOrder = { 'Crise': 5, 'Complexo': 4, 'Complicado': 3, 'Difícil': 2, 'Fácil': 1, 'Normal': 0 };
+                        let sortedConducts = [...project.conducts];
+                        
+                        if (conductSortOrder === 'asc') {
+                          sortedConducts.sort((a, b) => 
+                            (urgencyOrder[a.urgency] || 0) - (urgencyOrder[b.urgency] || 0)
+                          );
+                        } else if (conductSortOrder === 'desc') {
+                          sortedConducts.sort((a, b) => 
+                            (urgencyOrder[b.urgency] || 0) - (urgencyOrder[a.urgency] || 0)
+                          );
+                        }
+                        
+                        return sortedConducts.map((c) => (
                         <div
                           key={c.id}
                           className={`px-3 border-t grid grid-cols-12 items-center gap-2 py-2 ${dragOverConductId === c.id ? 'bg-slate-50' : ''}`}
@@ -2398,10 +3104,11 @@ export function ProjectDetails() {
                                 <Select value={c.urgency || 'Normal'} onValueChange={(v) => updateConduct(c.id, { urgency: v })}>
                                   <SelectTrigger className="h-8 w-[140px]"><SelectValue placeholder="Urgência" /></SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="Baixa">Baixa</SelectItem>
-                                    <SelectItem value="Normal">Normal</SelectItem>
-                                    <SelectItem value="Alta">Alta</SelectItem>
-                                    <SelectItem value="Crítica">Crítica</SelectItem>
+                                    <SelectItem value="Fácil">Fácil</SelectItem>
+                                    <SelectItem value="Difícil">Difícil</SelectItem>
+                                    <SelectItem value="Complicado">Complicado</SelectItem>
+                                    <SelectItem value="Complexo">Complexo</SelectItem>
+                                    <SelectItem value="Crise">Crise</SelectItem>
                                   </SelectContent>
                                 </Select>
                                 <Button variant="ghost" size="icon" className="h-7 w-7" title="Duplicar" onClick={() => duplicateConduct(c.id)}>
@@ -2412,11 +3119,23 @@ export function ProjectDetails() {
                                 </Button>
                               </>
                             ) : (
-                              <span className="text-xs text-slate-600">{c.urgency || 'Normal'}</span>
+                              <span 
+                                className={`text-xs font-medium px-2 py-1 rounded ${
+                                  c.urgency === 'Crise' ? 'bg-red-700 text-white' :
+                                  c.urgency === 'Complexo' ? 'bg-red-500 text-white' :
+                                  c.urgency === 'Complicado' ? 'bg-orange-500 text-white' :
+                                  c.urgency === 'Difícil' ? 'bg-blue-400 text-white' :
+                                  c.urgency === 'Fácil' ? 'bg-blue-600 text-white' :
+                                  'bg-slate-200 text-slate-700'
+                                }`}
+                              >
+                                {c.urgency || 'Normal'}
+                              </span>
                             )}
                           </div>
                         </div>
-                      ))
+                        ));
+                      })()
                     )}
                   </div>
                 </div>
