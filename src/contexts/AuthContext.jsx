@@ -99,7 +99,7 @@ const getUserProfile = async (supabaseUser) => {
           .select('*')
           .eq('id', supabaseUser.id)
           .single(),
-        10000 // 10 segundos de timeout para busca de perfil (aumentado)
+        15000 // 15 segundos de timeout para busca de perfil (aumentado)
       );
 
       if (error) {
@@ -192,25 +192,44 @@ export const AuthProvider = ({ children }) => {
       try {
         // console.log('🔍 Verificando autenticação...'); // Desabilitado para reduzir logs
         
-        // Verificar sessão do Supabase primeiro com timeout
+        // Verificar sessão do Supabase primeiro com timeout aumentado
         let session = null;
         let sessionError = null;
         
         try {
           const result = await withTimeout(
             supabase.auth.getSession(),
-            8000 // 8 segundos de timeout para verificação de sessão
+            15000 // 15 segundos de timeout para verificação de sessão (aumentado)
           );
           session = result.data?.session;
           sessionError = result.error;
         } catch (timeoutError) {
           console.warn('⏰ Timeout ao verificar sessão Supabase:', timeoutError.message);
+          
+          // IMPORTANTE: Em caso de timeout, tentar usar dados do localStorage como fallback
+          // Isso evita logout automático em caso de problemas de rede temporários
+          try {
+            const cachedAuthUser = localStorage.getItem('auth_user');
+            const cachedToken = localStorage.getItem('token');
+            
+            if (cachedAuthUser && cachedToken) {
+              console.log('📦 Usando dados em cache do localStorage após timeout');
+              const userData = JSON.parse(cachedAuthUser);
+              setUser(userData);
+              setIsLoading(false);
+              return; // Sair da função, mantendo usuário logado
+            }
+          } catch (cacheError) {
+            console.warn('⚠️ Erro ao ler cache do localStorage:', cacheError.message);
+          }
+          
           sessionError = timeoutError;
         }
         
         if (sessionError) {
           console.warn('⚠️ Erro ao verificar sessão Supabase:', sessionError.message || sessionError);
-          throw sessionError; // Forçar fallback
+          // Não forçar logout imediatamente, apenas logar o erro
+          // O usuário será deslogado apenas se não houver cache válido
         }
 
         if (session?.user) {
@@ -241,6 +260,20 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (error) {
         console.error('Erro ao verificar autenticação:', error?.message || error || 'Erro desconhecido');
+        
+        // Tentar usar cache como último recurso
+        try {
+          const cachedAuthUser = localStorage.getItem('auth_user');
+          const cachedToken = localStorage.getItem('token');
+          
+          if (cachedAuthUser && cachedToken) {
+            console.log('📦 Usando dados em cache do localStorage após erro');
+            const userData = JSON.parse(cachedAuthUser);
+            setUser(userData);
+          }
+        } catch (cacheError) {
+          console.warn('⚠️ Erro ao ler cache do localStorage:', cacheError.message);
+        }
       } finally {
         setIsLoading(false);
       }

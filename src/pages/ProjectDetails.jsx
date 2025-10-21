@@ -508,7 +508,7 @@ export function ProjectDetails() {
   const navigate = useNavigate();
   const { user, isLoading: authLoading, hasPermission } = useAuth();
   const { users } = useUsers();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState('preliminary');
   const [dragOverSource, setDragOverSource] = useState(null); // 'client' | 'exxata' | null
   const [searchClient, setSearchClient] = useState('');
   const [searchExxata, setSearchExxata] = useState('');
@@ -1020,6 +1020,15 @@ export function ProjectDetails() {
     const profile = member.profiles || member.profile;
     const id = member.user_id || member.id || profile?.id;
     if (!id) return null;
+    
+    // Debug: verificar dados do membro
+    console.log('🔍 Normalizando membro:', {
+      member,
+      profile,
+      hasEmail: !!profile?.email,
+      email: profile?.email
+    });
+    
     return {
       ...member,
       id,
@@ -2040,9 +2049,10 @@ export function ProjectDetails() {
         </div>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-4" onValueChange={setActiveTab}>
+      <Tabs value={activeTab} className="space-y-4" onValueChange={setActiveTab}>
         <div className="flex justify-between items-center">
           <TabsList>
+            <TabsTrigger value="preliminary">Menu</TabsTrigger>
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
             <TabsTrigger value="documents">Documentos</TabsTrigger>
             <TabsTrigger value="team">Equipe</TabsTrigger>
@@ -2068,6 +2078,30 @@ export function ProjectDetails() {
 
           {activeTab === 'indicators' && null}
         </div>
+
+        <TabsContent value="preliminary" className="pl-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            {[ 
+              { key: 'overview', title: 'Visão Geral', desc: 'Resumo do projeto com dados principais.', icon: <TrendingUp className="h-5 w-5 text-exxata-red" /> },
+              { key: 'documents', title: 'Documentos', desc: 'Arquivos do cliente e da Exxata.', icon: <FileText className="h-5 w-5 text-exxata-red" /> },
+              { key: 'team', title: 'Equipe', desc: 'Membros e permissões do projeto.', icon: <Users className="h-5 w-5 text-exxata-red" /> },
+              { key: 'activities', title: 'Atividades', desc: 'Planejamento e andamento das atividades.', icon: <Clock className="h-5 w-5 text-exxata-red" /> },
+              { key: 'indicators', title: 'Indicadores', desc: 'Gráficos e métricas do projeto.', icon: <BarChart3 className="h-5 w-5 text-exxata-red" /> },
+              { key: 'panorama', title: 'Panorama Atual', desc: 'Situação técnica, física e econômica.', icon: <Shield className="h-5 w-5 text-exxata-red" /> },
+              { key: 'ai-insights', title: 'Inteligência Humana', desc: 'Análises e percepções do time.', icon: <Brain className="h-5 w-5 text-exxata-red" /> },
+            ].map(sec => (
+              <Card key={sec.key} className="cursor-pointer hover:shadow-md transition" onClick={() => setActiveTab(sec.key)}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    {sec.icon}
+                    {sec.title}
+                  </CardTitle>
+                  <CardDescription>{sec.desc}</CardDescription>
+                </CardHeader>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
 
         <TabsContent value="overview" className="space-y-4 pl-4">
           <OverviewGrid 

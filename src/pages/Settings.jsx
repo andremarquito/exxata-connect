@@ -160,7 +160,7 @@ export function Settings() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4">
       {/* Cabeçalho da página */}
       <div className="bg-white rounded-lg border shadow-sm p-6 mb-6">
         <div className="space-y-2">

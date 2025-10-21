@@ -1378,7 +1378,7 @@ export function ProjectsProvider({ children }) {
 
   const getProjectMembers = async (projectId) => {
     try {
-      console.log('👥 Buscando membros do projeto:', projectId);
+      console.log('🔍 INICIANDO getProjectMembers para projeto:', projectId);
       
       // Buscar membros diretamente da tabela com JOIN para profiles
       // Especificar explicitamente qual relação usar para evitar ambiguidade
@@ -1402,11 +1402,20 @@ export function ProjectsProvider({ children }) {
         .eq('project_id', projectId); // Usar project_id ao invés de project
 
       if (error) {
-        console.error('❌ Erro ao buscar membros:', error);
+        console.error('❌ ERRO AO BUSCAR MEMBROS:', error);
+        console.error('❌ DETALHES DO ERRO:', JSON.stringify(error, null, 2));
         return [];
       }
 
-      console.log('✅ Membros encontrados:', data?.length || 0);
+      console.log('✅ MEMBROS ENCONTRADOS:', data?.length || 0);
+      console.log('📋 DADOS DOS MEMBROS:', data?.map(m => ({
+        user_id: m.user_id,
+        role: m.role,
+        profile_name: m.profiles?.name,
+        profile_email: m.profiles?.email,
+        has_profiles: !!m.profiles
+      })));
+      console.log('📦 DADOS COMPLETOS:', data);
       return data || [];
     } catch (error) {
       console.error('❌ Erro ao buscar membros:', error);
@@ -1416,14 +1425,15 @@ export function ProjectsProvider({ children }) {
 
   const loadProjectMembers = async (projectId) => {
     try {
-      console.log('👥 Carregando membros do projeto:', projectId);
+      console.log('🚀 INICIANDO loadProjectMembers para projeto:', projectId);
       
       const members = await getProjectMembers(projectId);
       
-      console.log('✅ Membros carregados:', members?.length || 0);
+      console.log('✅ MEMBROS CARREGADOS:', members?.length || 0);
+      console.log('📦 MEMBROS COMPLETOS:', members);
       return members;
     } catch (error) {
-      console.error('❌ Erro ao carregar membros:', error);
+      console.error('❌ ERRO ao carregar membros:', error);
       return [];
     }
   };

@@ -13,12 +13,30 @@ if (!supabaseUrl || !supabaseAnonKey) {
   )
 }
 
-// Criar cliente do Supabase com configurações simplificadas
+// Criar cliente do Supabase com configurações otimizadas
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false
+    detectSessionInUrl: false,
+    // Aumentar timeout para operações de autenticação
+    flowType: 'pkce',
+    storage: window.localStorage,
+    storageKey: 'supabase.auth.token'
+  },
+  global: {
+    headers: {
+      'x-client-info': 'exxata-connect'
+    }
+  },
+  db: {
+    schema: 'public'
+  },
+  // Configurações de rede para evitar timeouts
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
   }
 })
 

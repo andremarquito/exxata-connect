@@ -27,6 +27,39 @@ export function Projects() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('name-asc');
 
+  // Função para formatar valores monetários
+  const formatCurrency = (val) => {
+    if (val === null || val === undefined) return 'R$ 0,00';
+    
+    // Se já é número (como vem do Supabase para campos NUMERIC), usar direto
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    let s = String(val).trim();
+    // Remover símbolo e espaços
+    s = s.replace(/R\$\s?/g, '').replace(/\s/g, '');
+
+    // Caso BR: usa vírgula como decimal
+    if (s.includes(',')) {
+      s = s.replace(/\./g, '').replace(',', '.');
+      const n = Number(s);
+      if (isNaN(n)) return 'R$ 0,00';
+      return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    // Caso haja apenas pontos mas não representem decimal no final (ex: 15.000.000)
+    if (s.includes('.') && !/\.\d{1,2}$/.test(s)) {
+      s = s.replace(/\./g, '');
+    }
+
+    // Remover possíveis separadores de milhar em estilo EN
+    s = s.replace(/,/g, '');
+    const n = Number(s);
+    if (isNaN(n)) return 'R$ 0,00';
+    return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
   // Normaliza e cores para os status
   const normalizeStatus = (s) => {
     const t = (s || '').toString().toLowerCase();
@@ -84,7 +117,7 @@ export function Projects() {
   // Sem menu de ajustes/exclusão nesta visão
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4">
       {/* Cabeçalho da página com melhor espaçamento e contraste */}
       <div className="bg-white rounded-lg border shadow-sm p-6 mb-6">
         <div className="flex items-center justify-between">
@@ -203,7 +236,7 @@ export function Projects() {
                     <div className="flex items-center space-x-4 text-sm">
                       <div className="flex items-center">
                         <DollarSign className="h-4 w-4 mr-1 text-slate-500" />
-                        <span>{project.contractValue}</span>
+                        <span>{formatCurrency(project.contractValue)}</span>
                       </div>
                       <div className="flex items-center">
                         <MapPin className="h-4 w-4 mr-1 text-slate-500" />

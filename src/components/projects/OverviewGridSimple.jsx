@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { 
-  BarChart3, DollarSign, MapPin, Calendar, Users, Plus, X, Edit3, FileText, GripVertical, Download
+  BarChart3, DollarSign, MapPin, Calendar, Users, Plus, X, Edit3, FileText, GripVertical, Download, CalendarCheck
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -551,6 +551,22 @@ function renderWidgetCard(widget, isEditing, removeWidget, updateProjectBackend,
       );
 
     case 'exxataActivities':
+      const allActivities = [
+        'Administração Contratual Backoffice',
+        'Administração Contratual In Loco',
+        'Agente de Confiança',
+        'Assistência Técnica em Arbitragem',
+        'Assistência Técnica em Justiça',
+        'Negociações, Conciliações e Mediações',
+        'Apoio em Licitações e Concorrências',
+        'Laudos e Pareceres Técnicos',
+        'Optikon Exxata',
+      ];
+      
+      const selectedActivities = Array.isArray(project.exxataActivities) 
+        ? project.exxataActivities.filter(act => allActivities.includes(act))
+        : [];
+      
       return (
         <Card className="h-full">
           <CardHeader className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
@@ -558,48 +574,41 @@ function renderWidgetCard(widget, isEditing, removeWidget, updateProjectBackend,
             {headerActions}
           </CardHeader>
           <CardContent className="p-6 pt-0">
-            <div className="grid sm:grid-cols-2 gap-2">
-              {[
-                'Administração Contratual Backoffice',
-                'Administração Contratual In Loco',
-                'Agente de Confiança',
-                'Assistência Técnica em Arbitragem',
-                'Assistência Técnica em Justiça',
-                'Negociações, Conciliações e Mediações',
-                'Apoio em Licitações e Concorrências',
-                'Laudos e Pareceres Técnicos',
-                'Optikon Exxata',
-              ].map((opt) => {
-                const selected = Array.isArray(project.exxataActivities) && project.exxataActivities.includes(opt);
-                return (
-                  <button
-                    type="button"
-                    key={opt}
-                    disabled={!canEdit}
-                    onClick={() => {
-                      const prev = Array.isArray(project.exxataActivities) ? project.exxataActivities : [];
-                      const next = prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt];
-                      updateProjectBackend(project.id, { exxataActivities: next });
-                    }}
-                    className={`text-left px-3 py-2 rounded-md border text-sm transition-colors ${
-                      selected
-                        ? 'bg-blue-50 border-blue-300 text-blue-700'
-                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                    } ${!canEdit ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  >
-                    {opt}
-                  </button>
-                );
-              })}
-            </div>
-            {Array.isArray(project.exxataActivities) && project.exxataActivities.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-3">
-                {project.exxataActivities.map((act) => (
-                  <Badge key={act} variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">
+            {canEdit && (
+              <div className="grid sm:grid-cols-2 gap-2 mb-4">
+                {allActivities.map((opt) => {
+                  const selected = selectedActivities.includes(opt);
+                  return (
+                    <button
+                      type="button"
+                      key={opt}
+                      onClick={() => {
+                        const prev = Array.isArray(project.exxataActivities) ? project.exxataActivities : [];
+                        const next = prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt];
+                        updateProjectBackend(project.id, { exxataActivities: next });
+                      }}
+                      className={`text-left px-3 py-2 rounded-md border text-sm transition-colors ${
+                        selected
+                          ? 'bg-blue-50 border-blue-300 text-blue-700'
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {selectedActivities.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {selectedActivities.map((act) => (
+                  <Badge key={act} variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
                     {act}
                   </Badge>
                 ))}
               </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhuma atuação selecionada</p>
             )}
           </CardContent>
         </Card>
@@ -778,6 +787,12 @@ function renderWidgetCard(widget, isEditing, removeWidget, updateProjectBackend,
       );
 
     case 'period':
+      const formatDate = (dateStr) => {
+        if (!dateStr) return '—';
+        const date = new Date(dateStr + 'T00:00:00');
+        return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      };
+      
       return (
         <Card className="h-full">
           <CardHeader className="p-6 flex flex-row items-center justify-between space-y-0 pb-2">
@@ -797,7 +812,22 @@ function renderWidgetCard(widget, isEditing, removeWidget, updateProjectBackend,
                 </div>
               </div>
             ) : (
-              <div className="text-lg font-medium">{(project.startDate || '—') + ' — ' + (project.endDate || '—')}</div>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-green-600" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Início</p>
+                    <p className="text-sm font-medium">{formatDate(project.startDate)}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <CalendarCheck className="h-4 w-4 text-blue-600" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Fim</p>
+                    <p className="text-sm font-medium">{formatDate(project.endDate)}</p>
+                  </div>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

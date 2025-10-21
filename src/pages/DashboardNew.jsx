@@ -55,9 +55,29 @@ export function Dashboard() {
   );
 
   // Métricas do topo
-  const parseBRL = (str) => {
-    if (!str) return 0;
-    const s = String(str).replace(/\s/g, '').replace('R$', '').replace(/\./g, '').replace(',', '.');
+  const parseBRL = (val) => {
+    if (val === null || val === undefined) return 0;
+    // Se já é número (como vem do Supabase para campos NUMERIC), retornar direto
+    if (typeof val === 'number' && Number.isFinite(val)) return val;
+
+    let s = String(val).trim();
+    // Remover símbolo e espaços
+    s = s.replace(/R\$\s?/g, '').replace(/\s/g, '');
+
+    // Caso BR: usa vírgula como decimal
+    if (s.includes(',')) {
+      s = s.replace(/\./g, '').replace(',', '.');
+      const n = Number(s);
+      return isNaN(n) ? 0 : n;
+    }
+
+    // Caso haja apenas pontos mas não representem decimal no final (ex: 15.000.000)
+    if (s.includes('.') && !/\.\d{1,2}$/.test(s)) {
+      s = s.replace(/\./g, '');
+    }
+
+    // Remover possíveis separadores de milhar em estilo EN
+    s = s.replace(/,/g, '');
     const n = Number(s);
     return isNaN(n) ? 0 : n;
   };
