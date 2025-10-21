@@ -177,9 +177,9 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
         error: basicResult.error
       });
     } else {
-      // Para admins/managers: buscar projetos criados pelo usuário
+      // Para admins/managers: buscar TODOS os projetos (RLS já controla acesso)
       // Carregar membros via JOIN diretamente
-      console.log('👔 Usuário staff detectado, carregando projetos criados');
+      console.log('👔 Usuário staff detectado, carregando TODOS os projetos via RLS');
       basicResult = await supabase
         .from('projects')
         .select(`
@@ -227,8 +227,8 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
             created_at,
             updated_at
           )
-        `)
-        .eq('created_by', userId);
+        `);
+        // Removido .eq('created_by', userId) - RLS já controla o acesso
     }
       
     data = basicResult.data;
@@ -245,6 +245,14 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
     }
 
     console.log('✅ Projetos encontrados no Supabase:', data?.length || 0);
+    if (data && data.length > 0) {
+      console.log('📋 Lista de projetos carregados:', data.map(p => ({
+        id: p.id,
+        name: p.name,
+        created_by: p.created_by,
+        members_count: p.project_members?.length || 0
+      })));
+    }
 
     // Se não há dados, usar fallback
     if (!data || data.length === 0) {

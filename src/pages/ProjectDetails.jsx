@@ -1082,6 +1082,12 @@ export function ProjectDetails() {
     
     try {
       await addProjectMember(project.id, selectedUserId, 'member');
+      
+      // Recarregar membros imediatamente para atualizar a UI
+      const membersResult = await loadProjectMembers(project.id);
+      const normalizedMembers = (membersResult || []).map(member => normalizeMember(member));
+      setLoadedProjectMembers(normalizedMembers);
+      
       setShowAddMember(false);
       setSelectedUserId('');
       setSearchMember('');
@@ -1089,6 +1095,25 @@ export function ProjectDetails() {
     } catch (error) {
       console.error('Erro ao adicionar membro:', error);
       alert('Erro ao adicionar membro. Tente novamente.');
+    }
+  };
+
+  const handleRemoveMember = async (userId, memberName) => {
+    if (!window.confirm(`Tem certeza que deseja remover ${memberName} do projeto?`)) {
+      return;
+    }
+    
+    try {
+      setMemberMenuOpen(null); // Fechar menu
+      await removeProjectMember(project.id, userId);
+      
+      // Recarregar membros imediatamente para atualizar a UI
+      const membersResult = await loadProjectMembers(project.id);
+      const normalizedMembers = (membersResult || []).map(member => normalizeMember(member));
+      setLoadedProjectMembers(normalizedMembers);
+    } catch (error) {
+      console.error('Erro ao remover membro:', error);
+      alert('Erro ao remover membro. Tente novamente.');
     }
   };
 
