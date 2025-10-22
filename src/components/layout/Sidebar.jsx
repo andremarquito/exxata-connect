@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
-  LayoutDashboard, FolderKanban, Users, Settings, LifeBuoy, MessageSquareWarning, 
-  ChevronLeft, ChevronRight, MoreHorizontal 
+  LayoutDashboard, FolderKanban, Users, Settings, MessageSquareWarning, 
+  ChevronLeft, ChevronRight, MoreHorizontal, LogOut 
 } from 'lucide-react';
 
 const navItems = [
@@ -14,16 +14,26 @@ const navItems = [
 ];
 
 const helpItems = [
-  { to: '/help', icon: LifeBuoy, label: 'Ajuda' },
   { to: '/feedback', icon: MessageSquareWarning, label: 'Feedback' },
 ];
 
 export function Sidebar() {
-  const { user, hasPermission } = useAuth();
+  const { user, hasPermission, logout } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const navigate = useNavigate();
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed);
+  };
+
+  const toggleProfileMenu = () => {
+    setIsProfileMenuOpen(!isProfileMenuOpen);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
   };
 
   return (
@@ -83,7 +93,7 @@ export function Sidebar() {
         </nav>
       </div>
 
-      <div className="border-t border-gray-200 p-4">
+      <div className="border-t border-gray-200 p-4 relative">
         <div className="flex items-center">
           <div className="h-10 w-10 rounded-full bg-exxata-blue text-white flex items-center justify-center">
             {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
@@ -95,11 +105,39 @@ export function Sidebar() {
             </div>
           )}
           {!isCollapsed && (
-            <button className="p-1 rounded-md hover:bg-gray-100">
+            <button 
+              onClick={toggleProfileMenu}
+              className="p-1 rounded-md hover:bg-gray-100"
+            >
               <MoreHorizontal className="h-5 w-5 text-gray-500" />
             </button>
           )}
         </div>
+
+        {/* Dropdown do perfil */}
+        {isProfileMenuOpen && !isCollapsed && (
+          <div className="absolute bottom-full left-4 right-4 mb-2 rounded-xl shadow-lg bg-white ring-1 ring-slate-200 focus:outline-none z-50">
+            <div className="py-2">
+              <button
+                onClick={() => {
+                  navigate('/settings');
+                  setIsProfileMenuOpen(false);
+                }}
+                className="flex items-center w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <Settings className="mr-3 h-4 w-4" />
+                Configurações
+              </button>
+              <button
+                onClick={handleLogout}
+                className="flex items-center w-full px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <LogOut className="mr-3 h-4 w-4" />
+                Sair
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </aside>
   );

@@ -18,7 +18,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: true, // IMPORTANTE: Detectar tokens de reset/confirmação na URL
     // Aumentar timeout para operações de autenticação
     flowType: 'pkce',
     storage: window.localStorage,

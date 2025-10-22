@@ -98,6 +98,13 @@ export function LoginForm() {
     <div className="min-h-screen flex items-center justify-center bg-grey-sky p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
+          <div className="flex justify-center mb-6">
+            <img 
+              src="/Assinatura-de-Marca---Exxata_01.png" 
+              alt="Exxata Logo" 
+              className="h-16 w-auto object-contain"
+            />
+          </div>
           <div className="flex justify-center mb-4">
             <div className="text-2xl font-bold text-exxata-blue">
               Exxata <span className="text-exxata-red">Connect</span>
@@ -177,7 +184,7 @@ export function LoginForm() {
           <CardFooter className="flex flex-col space-y-4">
             <Button 
               type="submit" 
-              className="w-full bg-exxata-red hover:bg-dark-red"
+              className="w-full bg-exxata-red hover:bg-dark-red text-white"
               disabled={isLoading}
             >
               {isLoading ? 'Entrando...' : 'Entrar'}

@@ -8,6 +8,7 @@ import { Check, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
+import { validatePassword, getPasswordErrorMessage, PASSWORD_REQUIREMENTS } from '@/lib/passwordValidation';
 
 export function Settings() {
   const { user, updatePassword } = useAuth();
@@ -112,28 +113,52 @@ export function Settings() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      toast.error('A nova senha deve ter pelo menos 6 caracteres.');
+    // Validar complexidade da senha usando helper compartilhado
+    const validation = validatePassword(newPassword);
+    if (!validation.isValid) {
+      toast.error(getPasswordErrorMessage(validation.errors));
       return;
     }
 
     setIsSaving(true);
 
     try {
-      // Primeiro, verificar a senha atual fazendo login
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: currentPassword
-      });
-
-      if (signInError) {
+      console.log('🔄 Verificando senha atual...');
+      
+      // Primeiro, verificar se a senha atual está correta usando função RPC
+      const { data: isPasswordValid, error: verifyError } = await supabase
+        .rpc('verify_user_password', { password: currentPassword });
+      
+      if (verifyError) {
+        console.error('❌ Erro ao verificar senha:', verifyError);
+        throw new Error('Erro ao verificar senha atual. Tente novamente.');
+      }
+      
+      if (!isPasswordValid) {
         throw new Error('Senha atual incorreta.');
       }
-
-      // Atualizar senha no Supabase Auth
-      const { error: updateError } = await updatePassword(newPassword);
       
-      if (updateError) throw updateError;
+      console.log('✅ Senha atual verificada, atualizando...');
+      
+      // Atualizar a senha
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+      
+      if (updateError) {
+        console.error('❌ Erro ao atualizar senha:', updateError);
+        
+        // Tratar erros específicos
+        if (updateError.message?.includes('same_password')) {
+          throw new Error('A nova senha deve ser diferente da atual.');
+        } else if (updateError.message?.includes('session_not_found')) {
+          throw new Error('Sessão expirada. Faça login novamente.');
+        } else {
+          throw new Error('Erro ao alterar senha. Tente novamente.');
+        }
+      }
+
+      console.log('✅ Senha atualizada com sucesso');
 
       // Atualizar informações no perfil
       await supabase
@@ -321,7 +346,7 @@ export function Settings() {
                       type={showNewPassword ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Mínimo 6 caracteres"
+                      placeholder="Mínimo 8 caracteres"
                       required
                       className="pr-10"
                     />
@@ -339,9 +364,14 @@ export function Settings() {
                       )}
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Use uma senha forte com letras, números e caracteres especiais.
-                  </p>
+                  <div className="text-xs text-muted-foreground">
+                    <p className="font-medium mb-1">A senha deve ter:</p>
+                    <ul className="space-y-1">
+                      {PASSWORD_REQUIREMENTS.map((req, index) => (
+                        <li key={index}>• {req}</li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirm-password">Confirmar Nova Senha</Label>

@@ -11,11 +11,13 @@ import AuthCallback from '@/pages/AuthCallback';
 import ConfirmEmail from '@/pages/ConfirmEmail';
 import ForgotPassword from '@/pages/ForgotPassword';
 import ResetPassword from '@/pages/ResetPassword';
+import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import DashboardNew from '@/pages/DashboardNew';
 import Projects from '@/pages/Projects';
 import ProjectDetails from '@/pages/ProjectDetails';
 import Team from '@/pages/Team';
 import Settings from '@/pages/Settings';
+import Feedback from '@/pages/Feedback';
 import Header from '@/components/layout/Header';
 import Sidebar from '@/components/layout/Sidebar';
 import { InviteUserModal } from '@/components/projects/InviteUserModal';
@@ -68,6 +70,7 @@ const AppContent = () => {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/politica-privacidade" element={<PrivacyPolicy />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -94,6 +97,7 @@ const AppContent = () => {
             <Route path="/projects/:projectId" element={<ProjectDetails />} />
             <Route path="/team" element={<Team />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/feedback" element={<Feedback />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
@@ -143,6 +147,7 @@ const App = () => {
               <Route path="/auth/callback" element={<AuthCallback />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/politica-privacidade" element={<PrivacyPolicy />} />
               <Route
                 path="/*"
                 element={

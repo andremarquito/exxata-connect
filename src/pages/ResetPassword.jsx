@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Eye, EyeOff, CheckCircle } from 'lucide-react';
+import { validatePassword, getPasswordErrorMessage, PASSWORD_REQUIREMENTS } from '@/lib/passwordValidation';
 
 export function ResetPassword() {
   const [password, setPassword] = useState('');
@@ -16,40 +17,26 @@ export function ResetPassword() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [isSuccess, setIsSuccess] = useState(false);
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Verificar se há tokens de reset na URL
-    const accessToken = searchParams.get('access_token');
-    const refreshToken = searchParams.get('refresh_token');
+    // O Supabase agora detecta automaticamente os tokens na URL
+    // devido à configuração detectSessionInUrl: true
+    console.log('🔑 Página de reset de senha carregada');
     
-    if (accessToken && refreshToken) {
-      console.log('🔑 Tokens de reset encontrados na URL');
-      // Definir a sessão com os tokens do reset
-      supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken
-      });
-    }
-  }, [searchParams]);
+    // Verificar se há uma sessão ativa (tokens foram detectados)
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        console.log('✅ Sessão de reset detectada automaticamente');
+      } else {
+        console.warn('⚠️ Nenhuma sessão detectada - link pode estar expirado');
+      }
+    };
+    
+    checkSession();
+  }, []);
 
-  const validatePassword = (pwd) => {
-    const errors = [];
-    if (pwd.length < 6) {
-      errors.push('pelo menos 6 caracteres');
-    }
-    if (!/[A-Z]/.test(pwd)) {
-      errors.push('uma letra maiúscula');
-    }
-    if (!/[a-z]/.test(pwd)) {
-      errors.push('uma letra minúscula');
-    }
-    if (!/[0-9]/.test(pwd)) {
-      errors.push('um número');
-    }
-    return errors;
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -63,9 +50,9 @@ export function ResetPassword() {
     if (!password) {
       newErrors.password = 'Nova senha é obrigatória';
     } else {
-      const passwordErrors = validatePassword(password);
-      if (passwordErrors.length > 0) {
-        newErrors.password = `A senha deve ter ${passwordErrors.join(', ')}`;
+      const validation = validatePassword(password);
+      if (!validation.isValid) {
+        newErrors.password = getPasswordErrorMessage(validation.errors);
       }
     }
 
@@ -244,10 +231,9 @@ export function ResetPassword() {
             <div className="text-xs text-muted-foreground">
               <p className="font-medium mb-1">A senha deve ter:</p>
               <ul className="space-y-1">
-                <li>• Pelo menos 6 caracteres</li>
-                <li>• Uma letra maiúscula</li>
-                <li>• Uma letra minúscula</li>
-                <li>• Um número</li>
+                {PASSWORD_REQUIREMENTS.map((req, index) => (
+                  <li key={index}>• {req}</li>
+                ))}
               </ul>
             </div>
           </CardContent>
