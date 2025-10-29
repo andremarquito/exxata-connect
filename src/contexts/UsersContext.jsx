@@ -48,6 +48,8 @@ export function UsersProvider({ children }) {
           statusLabel,
           statusCode,
           empresa: profile.empresa,
+          cargo: profile.cargo,
+          phone: profile.phone,
           lastActive: profile.last_active || profile.updated_at || profile.created_at || new Date().toISOString(),
           supabaseProfile: true,
           invitedAt: profile.invited_at || profile.created_at,

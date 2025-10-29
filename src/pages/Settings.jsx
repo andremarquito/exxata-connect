@@ -14,6 +14,7 @@ export function Settings() {
   const { user, updatePassword } = useAuth();
   const [name, setName] = useState('');
   const [empresa, setEmpresa] = useState('');
+  const [cargo, setCargo] = useState('');
   const [phone, setPhone] = useState('');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -42,12 +43,14 @@ export function Settings() {
         setProfileData(data);
         setName(data.name || '');
         setEmpresa(data.empresa || '');
+        setCargo(data.cargo || '');
         setPhone(data.phone || '');
       } catch (error) {
         console.error('Erro ao carregar perfil:', error);
         // Usar dados do contexto como fallback
         setName(user?.name || '');
         setEmpresa(user?.empresa || '');
+        setCargo(user?.cargo || '');
         setPhone(user?.phone || '');
       }
     };
@@ -64,6 +67,7 @@ export function Settings() {
       const updateData = {
         name: name.trim(),
         empresa: empresa.trim() || null,
+        cargo: cargo.trim() || null,
         phone: phone.trim() || null,
         updated_at: new Date().toISOString()
       };
@@ -253,6 +257,15 @@ export function Settings() {
                     value={empresa} 
                     onChange={(e) => setEmpresa(e.target.value)}
                     placeholder="Nome da empresa"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cargo">Cargo</Label>
+                  <Input 
+                    id="cargo"
+                    value={cargo} 
+                    onChange={(e) => setCargo(e.target.value)}
+                    placeholder="Seu cargo na empresa"
                   />
                 </div>
                 <div className="space-y-2">

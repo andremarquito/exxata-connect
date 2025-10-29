@@ -17,6 +17,7 @@ const SignUpForm = () => {
     fullName: '',
     email: '',
     empresa: '',
+    cargo: '',
     phone: '',
     password: '',
     confirmPassword: ''
@@ -97,6 +98,11 @@ const SignUpForm = () => {
       return;
     }
 
+    if (!formData.cargo.trim()) {
+      toast.error('Cargo é obrigatório');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -111,6 +117,7 @@ const SignUpForm = () => {
           .from('profiles')
           .update({
             empresa: formData.empresa.trim() || null,
+            cargo: formData.cargo.trim() || null,
             phone: formData.phone.trim() || null,
             updated_at: new Date().toISOString()
           })
@@ -133,6 +140,7 @@ const SignUpForm = () => {
           userId,
           email: formData.email,
           empresa: formData.empresa.trim(),
+          cargo: formData.cargo.trim(),
           phone: formData.phone.trim(),
           timestamp: new Date().toISOString()
         };
@@ -337,6 +345,19 @@ const SignUpForm = () => {
                   type="text"
                   placeholder="Nome da empresa"
                   value={formData.empresa}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cargo">Cargo *</Label>
+                <Input
+                  id="cargo"
+                  name="cargo"
+                  type="text"
+                  placeholder="Seu cargo na empresa"
+                  value={formData.cargo}
                   onChange={handleChange}
                   required
                 />

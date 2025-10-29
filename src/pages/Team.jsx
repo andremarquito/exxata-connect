@@ -32,6 +32,7 @@ export function Team() {
   const { user } = useAuth();
   const { users, isLoading, addUser, updateUser, deleteUser } = useUsers();
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchEmpresa, setSearchEmpresa] = useState('');
   const [editingMember, setEditingMember] = useState(null);
 
   // Verificar permissões do usuário
@@ -40,10 +41,13 @@ export function Team() {
   const isManager = userRole === 'manager' || userRole === 'gerente';
   const canManageTeam = user?.permissions?.includes('manage_team');
   const canExportData = isAdmin || isManager; // Apenas Admin e Gerente podem exportar
-  const filteredMembers = (users || []).filter(member => 
-    member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    member.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredMembers = (users || []).filter(member => {
+    const matchesName = member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        member.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesEmpresa = !searchEmpresa || 
+                           (member.empresa && member.empresa.toLowerCase().includes(searchEmpresa.toLowerCase()));
+    return matchesName && matchesEmpresa;
+  });
 
   // Função para exportar dados da equipe para Excel
   const exportTeamData = () => {
@@ -68,6 +72,9 @@ export function Team() {
         'ID',
         'Nome',
         'E-mail',
+        'Empresa',
+        'Cargo',
+        'Telefone',
         'Função',
         'Status',
         'Data de Convite',
@@ -99,6 +106,9 @@ export function Team() {
           member.id || 'N/A',
           member.name || 'N/A',
           member.email || 'N/A',
+          member.empresa || 'N/A',
+          member.cargo || 'N/A',
+          member.phone || 'N/A',
           roleLabel(member.role) || 'N/A',
           member.status || 'N/A',
           invitedAt,
@@ -119,6 +129,9 @@ export function Team() {
         { wch: 8 },  // ID
         { wch: 20 }, // Nome
         { wch: 25 }, // E-mail
+        { wch: 20 }, // Empresa
+        { wch: 18 }, // Cargo
+        { wch: 15 }, // Telefone
         { wch: 15 }, // Função
         { wch: 12 }, // Status
         { wch: 15 }, // Data de Convite
@@ -212,16 +225,8 @@ export function Team() {
             </p>
             <div className="flex items-center space-x-4 mt-3">
               <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <div className="w-3 h-3 rounded-full bg-blue-100"></div>
-                <span>Usuários do Supabase ({users?.filter(u => u.supabaseProfile).length || 0})</span>
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <div className="w-3 h-3 rounded-full bg-gray-300"></div>
-                <span>Usuários locais ({users?.filter(u => !u.supabaseProfile).length || 0})</span>
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                <span>Total: {users?.length || 0} usuários</span>
+                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                <span>Total de usuários: {users?.length || 0}</span>
               </div>
             </div>
           </div>
@@ -243,15 +248,25 @@ export function Team() {
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="w-full sm:w-auto">
+            <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-3">
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="search"
-                  placeholder="Buscar membros..."
+                  placeholder="Buscar por nome ou e-mail..."
                   className="w-full sm:w-64 pl-8"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Buscar por empresa..."
+                  className="w-full sm:w-64 pl-8"
+                  value={searchEmpresa}
+                  onChange={(e) => setSearchEmpresa(e.target.value)}
                 />
               </div>
             </div>
@@ -262,6 +277,8 @@ export function Team() {
             <TableHeader>
               <TableRow>
                 <TableHead>Membro</TableHead>
+                <TableHead>Empresa</TableHead>
+                <TableHead>Cargo</TableHead>
                 <TableHead>Função</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Último acesso</TableHead>
@@ -271,7 +288,7 @@ export function Team() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={canManageTeam ? 5 : 4} className="text-center py-8">
+                  <TableCell colSpan={canManageTeam ? 7 : 6} className="text-center py-8">
                     <div className="flex items-center justify-center space-x-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-blue-500"></div>
                       <span className="text-muted-foreground">Carregando usuários...</span>
@@ -280,7 +297,7 @@ export function Team() {
                 </TableRow>
               ) : filteredMembers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={canManageTeam ? 5 : 4} className="text-center py-8">
+                  <TableCell colSpan={canManageTeam ? 7 : 6} className="text-center py-8">
                     <div className="text-muted-foreground">
                       {searchTerm ? 'Nenhum usuário encontrado com esse termo' : 'Nenhum usuário cadastrado'}
                     </div>
@@ -291,28 +308,23 @@ export function Team() {
                 <TableRow key={member.id}>
                   <TableCell>
                     <div className="flex items-center space-x-3">
-                      <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
-                        member.supabaseProfile ? 'bg-blue-100' : 'bg-muted'
-                      }`}>
-                        <User className={`h-5 w-5 ${
-                          member.supabaseProfile ? 'text-blue-600' : 'text-muted-foreground'
-                        }`} />
+                      <div className="h-10 w-10 rounded-full flex items-center justify-center bg-blue-100">
+                        <User className="h-5 w-5 text-blue-600" />
                       </div>
                       <div>
-                        <div className="flex items-center space-x-2">
-                          <p className="font-medium">{member.name}</p>
-                          {member.supabaseProfile && (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              Supabase
-                            </span>
-                          )}
-                        </div>
+                        <p className="font-medium">{member.name}</p>
                         <p className="text-sm text-muted-foreground">{member.email}</p>
-                        {isAdmin && member.supabaseProfile && (
+                        {isAdmin && (
                           <p className="text-xs text-blue-600">ID: {member.id}</p>
                         )}
                       </div>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm">{member.empresa || '-'}</span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm">{member.cargo || '-'}</span>
                   </TableCell>
                   <TableCell>
                     <Badge variant={member.role === 'admin' ? 'default' : 'outline'}>
@@ -328,7 +340,17 @@ export function Team() {
                     </div>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {member.lastActive}
+                    {member.lastActive 
+                      ? new Date(member.lastActive).toLocaleDateString('pt-BR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric'
+                        }) + ' ' + 
+                        new Date(member.lastActive).toLocaleTimeString('pt-BR', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      : 'Nunca'}
                   </TableCell>
                   {canManageTeam && (
                     <TableCell>

@@ -89,3 +89,47 @@ body {
 .font-manrope {
   font-family: 'Manrope', sans-serif;
 }
+
+/* Scrollbar customizado elegante */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(209 213 219) rgb(243 244 246);
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgb(243 244 246);
+  border-radius: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgb(209 213 219);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgb(156 163 175);
+}
+
+/* Dark mode scrollbar */
+@media (prefers-color-scheme: dark) {
+  .scrollbar-thin {
+    scrollbar-color: rgb(75 85 99) rgb(31 41 55);
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: rgb(31 41 55);
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgb(75 85 99);
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgb(107 114 128);
+  }
+}

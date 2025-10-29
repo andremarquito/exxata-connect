@@ -33,11 +33,12 @@ const AuthCallback = () => {
               const pendingData = JSON.parse(pendingDataStr);
               console.log('📝 Processando dados pendentes do perfil:', pendingData);
               
-              // Atualizar perfil com empresa e telefone
+              // Atualizar perfil com empresa, cargo e telefone
               const { error: updateError } = await supabase
                 .from('profiles')
                 .update({
                   empresa: pendingData.empresa || null,
+                  cargo: pendingData.cargo || null,
                   phone: pendingData.phone || null,
                   status: 'Ativo', // Agora está ativo após confirmação
                   updated_at: new Date().toISOString()

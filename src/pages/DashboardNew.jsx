@@ -101,10 +101,11 @@ export function Dashboard() {
   useEffect(() => {
     const key = `exxata_featured_${user?.id ?? 'anon'}`;
     const saved = localStorage.getItem(key);
-    if (saved) {
-      const id = Number(saved);
-      if (visibleProjects.some((p) => p.id === id)) {
-        setFeaturedId(id);
+    if (saved && visibleProjects.length > 0) {
+      // Tentar encontrar o projeto salvo (pode ser string UUID ou número)
+      const foundProject = visibleProjects.find((p) => String(p.id) === saved);
+      if (foundProject) {
+        setFeaturedId(foundProject.id);
         return;
       }
     }
@@ -117,10 +118,14 @@ export function Dashboard() {
   );
 
   const handleFeaturedChange = (value) => {
-    const id = Number(value);
-    setFeaturedId(id);
-    const key = `exxata_featured_${user?.id ?? 'anon'}`;
-    localStorage.setItem(key, String(id));
+    // value vem como string do Select
+    // Encontrar o projeto correspondente para pegar o ID no formato correto
+    const selectedProject = visibleProjects.find((p) => String(p.id) === value);
+    if (selectedProject) {
+      setFeaturedId(selectedProject.id);
+      const key = `exxata_featured_${user?.id ?? 'anon'}`;
+      localStorage.setItem(key, String(selectedProject.id));
+    }
   };
 
   const openNewProject = () => {
@@ -256,7 +261,7 @@ export function Dashboard() {
       case 'currency':
         return formatBRLCompact(value);
       case 'decimal':
-        return value > 0 ? `R$ ${value.toFixed(2).replace('.', ',')}` : '0,00';
+        return value > 0 ? `US$ ${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'US$ 0.00';
       case 'number':
       default:
         return value.toString();
@@ -307,7 +312,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-8 space-y-8">
+      <div className="max-w-7xl mx-auto px-8 space-y-8 pb-8">
         {/* Métricas principais - Cards Personalizáveis */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {selectedCards.map((cardId) => {
@@ -420,7 +425,7 @@ export function Dashboard() {
         <div className="grid gap-8 lg:grid-cols-3">
           {/* Projetos de Consultoria */}
           <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
-            <CardHeader className="pb-4">
+            <CardHeader>
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                   <CardTitle className="text-xl font-bold text-blue-exxata mb-2">Projetos de Consultoria</CardTitle>
@@ -456,7 +461,7 @@ export function Dashboard() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 pb-6">
               {/* Projeto Principal Dinâmico */}
               <div className="bg-gradient-to-r from-blue-50 to-slate-50 p-6 rounded-xl border border-slate-200">
                 {featured ? (
@@ -485,10 +490,26 @@ export function Dashboard() {
                         )}
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-blue-exxata mb-1">{featured.progress ?? 0}%</div>
-                      <Progress value={featured.progress ?? 0} className="w-24 h-2" />
-                      <div className="mt-3">
+                    <div className="text-right space-y-3">
+                      {/* Avanço de Prazo */}
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="text-right">
+                          <div className="text-xs text-slate-500 mb-1">Avanço de Prazo</div>
+                          <div className="text-xl font-bold text-blue-exxata">{featured.progress ?? 0}%</div>
+                        </div>
+                        <Clock className="h-5 w-5 text-slate-400" />
+                      </div>
+                      
+                      {/* Avanço de Faturamento */}
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="text-right">
+                          <div className="text-xs text-slate-500 mb-1">Avanço de Faturamento</div>
+                          <div className="text-xl font-bold text-green-600">{featured.billingProgress ?? 0}%</div>
+                        </div>
+                        <DollarSign className="h-5 w-5 text-green-500" />
+                      </div>
+                      
+                      <div className="mt-3 pt-3 border-t border-slate-200">
                         <Link to={`/projects/${featured.id}`} className="text-sm text-blue-exxata hover:underline inline-flex items-center">
                           Abrir Projeto
                           <span className="sr-only">Abrir</span>

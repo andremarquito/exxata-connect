@@ -301,7 +301,7 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
         Array.isArray(project.conducts) ? project.conducts.map(conduct => ({
           id: conduct.id,
           content: conduct.content,
-          urgency: conduct.urgency || 'Normal',
+          urgency: conduct.urgency || 'Difícil',
           order: conduct.display_order || 0,
           createdAt: conduct.created_at,
           createdBy: conduct.created_by
@@ -311,7 +311,10 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
         fisica: { status: 'green', items: [] },
         economica: { status: 'green', items: [] },
       },
-      overviewConfig: project.overview_cards || { widgets: [], layouts: {} },
+      overviewConfig: project.overview_config || project.overview_cards || { widgets: [], layouts: {} },
+      physicalProgressReal: project.physical_progress_real || 0,
+      physicalProgressContract: project.physical_progress_contract || 0,
+      billingProgressContract: project.billing_progress_contract || 0,
       activities: (project.project_activities || []).map(act => ({
         id: act.id,
         seq: act.custom_id || act.id,
@@ -547,7 +550,7 @@ export function ProjectsProvider({ children }) {
 
       // Mapear campos do patch para os nomes corretos do Supabase
       if (patch.overviewConfig !== undefined) {
-        supabaseData.overview_cards = patch.overviewConfig;
+        supabaseData.overview_config = patch.overviewConfig;
       }
 
       if (patch.contract_value !== undefined) {
@@ -586,8 +589,24 @@ export function ProjectsProvider({ children }) {
         supabaseData.billing_progress = patch.billing_progress;
       }
 
+      if (patch.billingProgress !== undefined) {
+        supabaseData.billing_progress = patch.billingProgress;
+      }
+
+      if (patch.billingProgressContract !== undefined) {
+        supabaseData.billing_progress_contract = patch.billingProgressContract;
+      }
+
       if (patch.progress !== undefined) {
         supabaseData.progress = patch.progress;
+      }
+
+      if (patch.physicalProgressReal !== undefined) {
+        supabaseData.physical_progress_real = patch.physicalProgressReal;
+      }
+
+      if (patch.physicalProgressContract !== undefined) {
+        supabaseData.physical_progress_contract = patch.physicalProgressContract;
       }
 
       if (patch.sector !== undefined) {
@@ -1453,7 +1472,7 @@ export function ProjectsProvider({ children }) {
       
       const newConduct = await conductService.createConduct(projectId, {
         content: conductData.text || conductData.content || '',
-        urgency: conductData.urgency || 'Normal',
+        urgency: conductData.urgency || 'Difícil',
         display_order: maxOrder + 1
       });
 

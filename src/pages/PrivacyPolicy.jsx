@@ -53,10 +53,11 @@ const PrivacyPolicy = () => {
                 Abrangência
               </h2>
               <p className="text-justify">
-                Esta política se aplica ao uso da plataforma Exxata Connect e a todas as operações de tratamento de dados 
-                pessoais realizadas pela Exxata no contexto da plataforma. Abrange os dados coletados de usuários 
-                (representantes de empresas clientes) ao se cadastrarem e utilizarem os serviços da Exxata Connect. Todos os 
-                colaboradores, parceiros e fornecedores que possam ter acesso a esses dados pessoais em nome da Exxata estão 
+                Esta política se aplica ao uso da plataforma Exxata Connect e a todas as operações de tratamento de dados pessoais 
+                realizadas pela Exxata no contexto da plataforma. Abrange os dados coletados de usuários (representantes de empresas 
+                clientes) ao se cadastrarem e utilizarem os serviços da Exxata Connect, bem como de outros titulares que eventualmente 
+                a Exxata Connect precise coletar dados para cumprir as finalidades, sobretudo de cumprimento de contrato. Por isso mesmo, 
+                todos os colaboradores, parceiros e fornecedores que possam ter acesso a esses dados pessoais em nome da Exxata estão 
                 sujeitos a esta política e às leis de proteção de dados vigentes.
               </p>
             </section>
@@ -67,7 +68,7 @@ const PrivacyPolicy = () => {
                 Dados Pessoais Coletados e Finalidades
               </h2>
               <p className="text-justify mb-4">
-                Coletamos apenas os dados pessoais necessários para oferecer e aprimorar os serviços da plataforma Exxata 
+                Coletamos apenas os dados pessoais necessários para oferecer, executar e aprimorar os serviços da plataforma Exxata 
                 Connect, respeitando os princípios de necessidade e adequação previstos na LGPD. Ao utilizar a plataforma, 
                 você nos fornece diretamente algumas informações pessoais por meio de formulários de cadastro ou atualizações 
                 de perfil. Esses dados incluem:
@@ -91,16 +92,18 @@ const PrivacyPolicy = () => {
                 </li>
               </ul>
               <p className="text-justify mt-4">
-                <strong>Finalidades:</strong> Os dados acima são tratados estritamente para permitir o acesso seguro à plataforma, 
-                viabilizar as funcionalidades de gerenciamento de projetos no Exxata Connect e manter contato com os usuários 
-                sobre assuntos relacionados ao serviço. Em suma, usamos os dados pessoais para: (a) criar e gerenciar sua conta 
-                de usuário; (b) identificar adequadamente os participantes dos projetos dentro da plataforma; (c) fornecer suporte 
-                e orientação quando solicitado; e (d) enviar informações ou avisos relacionados ao uso da plataforma.
+                <strong>Finalidades:</strong> Os dados acima são tratados estritamente para permitir o acesso seguro à plataforma, viabilizar as 
+                funcionalidades de gerenciamento de projetos no Exxata Connect, manter contato com os usuários sobre assuntos relacionados ao 
+                serviço e executar os contratos relacionados ao Exxata Connect e o titular de dados. Em suma, usamos os dados pessoais para: 
+                (a) criar e gerenciar sua conta de usuário; (b) identificar adequadamente os participantes dos projetos dentro da plataforma; 
+                (c) fornecer suporte e orientação quando solicitado; (d) enviar informações ou avisos relacionados ao uso da plataforma; 
+                (e) executar eventuais contratos relacionados ao titular de dados e a Exxata Connect; (f) auxiliar o titular em relação ao 
+                exercício regular de seus direitos; e (g) beneficiá-lo mediante otimização e eficácia dos serviços prestados pela Exxata Connect.
               </p>
               <p className="text-justify mt-3 text-sm italic text-gray-600">
-                Vale ressaltar que não coletamos dados pessoais sensíveis (conforme definidos na LGPD, ex: origem étnica, 
-                convicções religiosas, dados de saúde, biométricos etc.) durante o uso da plataforma. Os dados solicitados 
-                restringem-se ao necessário para identificar o usuário em âmbito profissional e viabilizar o relacionamento comercial.
+                Vale ressaltar que não coletamos dados pessoais sensíveis (conforme definidos no art. 5º, inciso II, da LGPD, ex: origem étnica, 
+                convicções religiosas, dados de saúde, biométricos etc.) durante o uso da plataforma. Os dados solicitados restringem-se ao 
+                necessário para identificar o usuário em âmbito profissional e viabilizar contratos e/ou relacionamento comercial.
               </p>
             </section>
 
@@ -110,12 +113,12 @@ const PrivacyPolicy = () => {
                 Base Legal para Tratamento de Dados
               </h2>
               <p className="text-justify">
-                A Exxata trata os dados pessoais dos usuários da plataforma Exxata Connect com bases legais permitidas na LGPD. 
-                Em geral, o tratamento de nome, e-mail, telefone e empresa se dá para a execução de contrato ou de procedimentos 
-                preliminares relacionados a contrato do qual o usuário (ou a empresa que ele representa) é parte (art. 7º, V da LGPD). 
-                Adicionalmente, determinados tratamentos podem se basear no legítimo interesse da Exxata (art. 7º, IX da LGPD), 
-                por exemplo, para manter a segurança da plataforma e prevenir fraudes, sempre respeitando os direitos e liberdades 
-                fundamentais dos titulares.
+                A Exxata trata os dados pessoais dos usuários da plataforma Exxata Connect com bases legais permitidas na LGPD. Em geral, o 
+                tratamento de nome, e-mail, telefone e empresa se dá para a execução de contrato ou de procedimentos preliminares relacionados 
+                a contrato do qual o usuário (ou a empresa que ele representa) é parte (art. 7º, V da LGPD). Adicionalmente, determinados 
+                tratamentos podem se basear no legítimo interesse da Exxata (art. 7º, IX da LGPD), por exemplo, para manter a segurança da 
+                plataforma e prevenir fraudes, sempre respeitando os direitos e liberdades fundamentais dos titulares. Não obstante, é feito 
+                também com base no cumprimento de obrigação legal ou regulatória pela Exxata Connect (art. 7º, II, LGPD).
               </p>
             </section>
 
@@ -217,11 +220,10 @@ const PrivacyPolicy = () => {
                 Transferência Internacional de Dados
               </h2>
               <p className="text-justify">
-                Como a infraestrutura de tecnologia da informação da Exxata Connect utiliza serviços de nuvem, é possível que 
-                os dados pessoais coletados sejam armazenados ou processados fora do Brasil, incluindo em datacenters localizados 
-                nos Estados Unidos ou em outros países. As transferências internacionais de dados serão sempre feitas em 
-                conformidade com a LGPD e demais regulamentações, assegurando que os fornecedores envolvidos aderem a padrões 
-                rigorosos de proteção de dados.
+                Como a infraestrutura de tecnologia da informação da Exxata Connect utiliza serviços de nuvem, é possível que os dados pessoais 
+                coletados sejam armazenados ou processados fora do Brasil, incluindo em datacenters localizados nos Estados Unidos ou em outros 
+                países. As transferências internacionais de dados serão sempre feitas em conformidade com a LGPD e demais regulamentações, 
+                assegurando que os fornecedores envolvidos adotem padrões rigorosos de proteção de dados, no mesmo nível exigido pela LGPD.
               </p>
             </section>
 
@@ -231,13 +233,13 @@ const PrivacyPolicy = () => {
                 Encarregado de Dados e Canal de Contato
               </h2>
               <p className="text-justify mb-4">
-                A Exxata nomeou um Encarregado de Proteção de Dados (Data Protection Officer - DPO), responsável por supervisionar 
-                as questões relativas a esta política e ao cumprimento da LGPD. Caso você tenha dúvidas, preocupações ou 
-                solicitações relativas aos seus dados pessoais, ou deseje exercer quaisquer dos direitos elencados acima, poderá 
-                entrar em contato conosco a qualquer momento pelos seguintes canais:
+                A Exxata nomeou um Encarregado de Proteção de Dados (Data Protection Officer - DPO), que é o (Igor Fontes) responsável por 
+                supervisionar as questões relativas a esta política e ao cumprimento da LGPD. Caso você tenha dúvidas, preocupações ou 
+                solicitações relativas aos seus dados pessoais, ou deseje exercer quaisquer dos direitos elencados acima, poderá entrar em 
+                contato conosco a qualquer momento pelos seguintes canais:
               </p>
               <div className="bg-slate-100 p-4 rounded-lg border-l-4 border-exxata-blue">
-                <p className="mb-2"><strong>E-mail:</strong> <a href="mailto:lgpd@exxata.com.br" className="text-blue-600 hover:underline">lgpd@exxata.com.br</a></p>
+                <p className="mb-2"><strong>E-mail:</strong> <a href="mailto:compliance@exxata.com.br" className="text-blue-600 hover:underline">compliance@exxata.com.br</a></p>
                 <p><strong>Endereço:</strong> Av. Getúlio Vargas, nº 671, Funcionários, Belo Horizonte/MG, CEP 30112-021 (a/c Encarregado de Dados)</p>
               </div>
             </section>
@@ -254,7 +256,7 @@ const PrivacyPolicy = () => {
                 e comunicaremos os usuários por meio dos canais de contato disponíveis.
               </p>
               <p className="text-sm text-gray-600 font-semibold">
-                Última atualização: 21 de outubro de 2025
+                Última atualização: 28 de outubro de 2025
               </p>
             </section>
           </CardContent>

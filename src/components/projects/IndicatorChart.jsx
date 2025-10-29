@@ -19,6 +19,18 @@ const formatValue = (value, format, opts = {}) => {
     }).format(num);
   }
 
+  if (format === 'currency-usd') {
+    const useCompact = compact || Math.abs(num) >= 1_000_000;
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      notation: useCompact ? 'compact' : 'standard',
+      compactDisplay: 'short',
+      minimumFractionDigits: useCompact ? 1 : 2,
+      maximumFractionDigits: useCompact ? 1 : 2,
+    }).format(num);
+  }
+
   if (format === 'percentage') {
     return new Intl.NumberFormat('pt-BR', {
       style: 'percent',
@@ -195,15 +207,35 @@ const IndicatorChart = ({ indicator }) => {
     );
   }
 
-  if (type === 'pie') {
-    const pieData = labels.map((label, index) => ({
-      name: label,
-      value: datasets[0]?.values[index] || 0,
-    }));
+  if (type === 'pie' || type === 'doughnut') {
+    const pieData = labels.map((label, index) => {
+      const rawValue = datasets[0]?.values[index];
+      // Converter string para número
+      const numValue = typeof rawValue === 'string' ? parseFloat(rawValue) : (rawValue || 0);
+      return {
+        name: label,
+        value: Number.isFinite(numValue) ? numValue : 0,
+      };
+    });
+
+    // Verificar se há valores válidos
+    const hasValidData = pieData.some(d => d.value && d.value > 0);
 
     // Usar cores individuais por fatia, ou cores padrão cíclicas
     const defaultColors = ['#d51d07', '#09182b', '#0ea5e9', '#f59e0b', '#10b981', '#6366f1'];
     const pieColors = datasets[0]?.colors || defaultColors;
+
+    // Para rosca (doughnut), definir innerRadius
+    const innerRadius = type === 'doughnut' ? 50 : 0;
+
+    // Se não há dados válidos, mostrar mensagem
+    if (!hasValidData) {
+      return (
+        <div style={{ width: '100%', height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <p className="text-gray-500">Nenhum dado disponível para exibir</p>
+        </div>
+      );
+    }
 
     return (
       <div style={{ width: '100%', height: 300 }}>
@@ -221,6 +253,7 @@ const IndicatorChart = ({ indicator }) => {
                 const valText = formatValue(value, valueFormat, { compact: true });
                 return `${name} ${valText} (${(percent * 100).toFixed(0)}%)`;
               } : false}
+              innerRadius={innerRadius}
               outerRadius={80}
               fill="#8884d8"
               dataKey="value"

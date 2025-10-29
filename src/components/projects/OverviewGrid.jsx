@@ -20,11 +20,16 @@ const CARD_CATALOG = [
   { type: 'billingProgress', label: 'Progresso em Faturamento', icon: BarChart3 },
   { type: 'progress', label: 'Progresso de Prazo', icon: BarChart3 },
   { type: 'contractValue', label: 'Valor do Contrato', icon: DollarSign },
+  { type: 'measuredValue', label: 'Valor Medido (R$)', icon: DollarSign },
   { type: 'exxataActivities', label: 'Atuação Exxata', icon: Edit3 },
   { type: 'sector', label: 'Setor de Atuação', icon: MapPin },
   { type: 'location', label: 'Localização', icon: MapPin },
-  { type: 'period', label: 'Período', icon: Calendar },
+  { type: 'period', label: 'Período de Vigência', icon: Calendar },
+  { type: 'executionPeriod', label: 'Período de Execução', icon: Calendar },
   { type: 'description', label: 'Descrição do Projeto', icon: Edit3 },
+  { type: 'contractSignatureDate', label: 'Data de Assinatura do Contrato', icon: Calendar },
+  { type: 'osSignatureDate', label: 'Data de Assinatura da OS', icon: Calendar },
+  { type: 'reportCutoffDate', label: 'Data de Corte do Relatório', icon: Calendar },
   { type: 'hourlyRate', label: 'Valor do Homem-Hora', icon: DollarSign },
   { type: 'disputedAmount', label: 'Valor em Discussão', icon: DollarSign },
   { type: 'contractSummary', label: 'Título do Contrato', icon: Edit3 },
@@ -36,9 +41,14 @@ function getDefaultSize(type) {
     case 'exxataActivities':
       return { w: 6, h: 3 };
     case 'period':
+    case 'executionPeriod':
     case 'contractSummary':
     case 'sector':
       return { w: 4, h: 2 };
+    case 'contractSignatureDate':
+    case 'osSignatureDate':
+    case 'reportCutoffDate':
+      return { w: 3, h: 2 }; // cards de data única
     default:
       return { w: 3, h: 2 }; // cards numéricos/percentuais
   }
@@ -422,7 +432,7 @@ function renderCard(widget, isEditing, updateProject, project, canEdit) {
               />
             ) : (
               <div className="text-2xl font-bold">
-                {project.hourlyRate ? `R$ ${Number(project.hourlyRate).toFixed(2).replace('.', ',')}` : '—'}
+                {project.hourlyRate ? `US$ ${Number(project.hourlyRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
               </div>
             )}
           </CardContent>

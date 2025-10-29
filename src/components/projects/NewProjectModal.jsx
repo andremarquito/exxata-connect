@@ -1,11 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { X, CalendarDays, Users, FileText, MapPin, DollarSign } from 'lucide-react';
+import { X, CalendarDays, FileText, MapPin, DollarSign } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useUsers } from '@/contexts/UsersContext';
 
 export function NewProjectModal({ isOpen, onClose, onCreate }) {
   const [name, setName] = useState('');
@@ -15,8 +14,6 @@ export function NewProjectModal({ isOpen, onClose, onCreate }) {
   const [endDate, setEndDate] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
-  const [teamSearch, setTeamSearch] = useState('');
-  const [selectedTeam, setSelectedTeam] = useState([]);
   const [sector, setSector] = useState('');
   const [exxataActivities, setExxataActivities] = useState([]);
   // Novos campos para cards personalizáveis
@@ -24,25 +21,6 @@ export function NewProjectModal({ isOpen, onClose, onCreate }) {
   const [disputedAmount, setDisputedAmount] = useState('');
   const [contractSummary, setContractSummary] = useState('');
   const [billingProgress, setBillingProgress] = useState('');
-  const { users } = useUsers();
-
-  const filteredUsers = useMemo(() => {
-    const q = teamSearch.trim().toLowerCase();
-    const base = Array.isArray(users) ? users : [];
-    if (!q) return base;
-    return base.filter(u => (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q));
-  }, [teamSearch, users]);
-
-  const addToTeam = (user) => {
-    if (!selectedTeam.find(u => u.id === user.id)) {
-      setSelectedTeam([...selectedTeam, user]);
-    }
-    setTeamSearch('');
-  };
-
-  const removeFromTeam = (id) => {
-    setSelectedTeam(selectedTeam.filter(u => u.id !== id));
-  };
 
   const formatCurrency = (value) => {
     try {
@@ -78,7 +56,6 @@ export function NewProjectModal({ isOpen, onClose, onCreate }) {
       location,
       sector,
       exxataActivities,
-      team: selectedTeam.map(u => ({ id: u.id, name: u.name, email: u.email })),
       // Novos campos
       hourlyRate,
       disputedAmount,
@@ -244,38 +221,9 @@ export function NewProjectModal({ isOpen, onClose, onCreate }) {
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* Equipe do Projeto */}
-            <div className="space-y-2">
-              <Label>Equipe do Projeto</Label>
-              <div className="relative">
-                <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input placeholder="Buscar usuário pelo nome ou e-mail" className="pl-10" value={teamSearch} onChange={(e) => setTeamSearch(e.target.value)} />
-              </div>
-              {filteredUsers.length > 0 && (
-                <div className="border border-slate-200 rounded-md divide-y max-h-40 overflow-auto">
-                  {filteredUsers.map(u => (
-                    <button type="button" key={u.id} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between" onClick={() => addToTeam(u)}>
-                      <span className="text-sm">{u.name} <span className="text-slate-400">• {u.email}</span></span>
-                      <span className="text-xs text-exxata-red">Adicionar</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {selectedTeam.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {selectedTeam.map(u => (
-                    <span key={u.id} className="inline-flex items-center gap-2 bg-slate-100 text-slate-700 rounded-full px-3 py-1 text-xs">
-                      {u.name}
-                      <button type="button" className="text-slate-500 hover:text-slate-700" onClick={() => removeFromTeam(u.id)}>×</button>
-                    </span>
-                  ))}
-                </div>
-              )}
 
               {/* Novos campos para dashboard personalizado */}
-              <div className="space-y-4 md:col-span-2 border-t pt-4">
+              <div className="space-y-4 md:col-span-2 border-t pt-4 mt-4">
                 <h3 className="text-lg font-semibold text-slate-700">Campos Adicionais</h3>
                 <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">

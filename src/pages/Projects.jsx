@@ -243,6 +243,18 @@ export function Projects() {
                         <span>{project.location}</span>
                       </div>
                     </div>
+                    <div className="flex items-center space-x-6">
+                      {/* Avanço de Prazo */}
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-slate-400" />
+                        <span className="text-sm font-medium text-blue-exxata">{project.progress ?? 0}%</span>
+                      </div>
+                      {/* Avanço de Faturamento */}
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-green-500" />
+                        <span className="text-sm font-medium text-green-600">{project.billingProgress ?? 0}%</span>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

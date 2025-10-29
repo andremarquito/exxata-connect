@@ -1,0 +1,52 @@
+
+Incluir opção de ver ou remover o eixo
+
+Incluir um campo de data de corte
+
+Testar a importação total
+
+Criar 'função' de salvar o visual por época, ficar visível na escolha do projeto.
+
+O usuário precisará incluir uma senha "exxata" no texto antes de pressionar ok ao tentar excluir um projeto.
+
+Incluir gráficos sobrepostos.
+
+Incluir opção de aumentar a caixa do gráfico.
+
+Incluir 'importar' nas condutas
+
+Avaliar hipótese de e-mails sem mostrar sugestão
+
+Incluir Progresso de Avanço Físico e Faturamento Real e Contratado
+
+Pensar em card que seja integrado para o financeiro ver pleito
+
+Avaliar retirar o gráfico gantt e as datas
+
+Incluir dólar no monetário - gráfico
+
+Pensar em como incluir o cargo do colaborador (cliente)
+
+Incluir card valor medido e automatizar percentuais.
+
+Incluir aba de cronograma, baseada na atividade.
+
+Incluir card de data de assinatura: 
+
+Incluir card de data da OS:
+
+PRIORIDADE: 
+
+Mudar benchmark para dólar
+
+Deixar o azul, vermelho e cinza padrão
+
+Período criar "Vigência" e "Execução"
+
+Indicadores com nomes mais a prova de burro
+
+Criar modo cliente para visualizar
+
+Incluir um campo de data de corte
+
+Incluir o mesmo ao tentar remover um usuário: Você não tem permissão para excluir este projeto. Função restrita ao administrador e gerente. ao tentar excluir um membro.

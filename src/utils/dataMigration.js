@@ -246,7 +246,7 @@ const migrateProjectConducts = async (localConducts, projectId) => {
     for (const [index, localConduct] of localConducts.entries()) {
       const conductData = {
         content: localConduct.content,
-        urgency: localConduct.urgency || 'Normal',
+        urgency: localConduct.urgency || 'Difícil',
         display_order: index
       };
 

@@ -12,7 +12,7 @@ import {
   BarChart3, Clock, CheckCircle, AlertCircle, TrendingUp, Brain, 
   Download, Upload, Search, Zap, Target, Shield, ArrowLeft, Settings, UserPlus, FilePlus2,
   Image, File, Table, Trash2, PieChart, LineChart, Plus, Edit3, Palette, X, GripVertical, Copy, Camera,
-  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown
+  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown, Eye
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjects } from '@/contexts/ProjectsContext';
@@ -60,8 +60,8 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
     
     let formattedDatasets = formatDatasetsForForm(indicator?.datasets);
     
-    // Para gráficos de pizza, garantir que temos valores e cores suficientes para cada rótulo
-    if (indicator?.chart_type === 'pie' && indicator?.labels) {
+    // Para gráficos de pizza/rosca, garantir que temos valores e cores suficientes para cada rótulo
+    if ((indicator?.chart_type === 'pie' || indicator?.chart_type === 'doughnut') && indicator?.labels) {
       const labelCount = indicator.labels.length;
       if (formattedDatasets[0]) {
         // Garantir que values e colors tenham o mesmo tamanho que labels
@@ -84,9 +84,9 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
     setDatasets(formattedDatasets);
   }, [indicator?.id]);
 
-  // Atualizar datasets quando labels ou chartType mudam para gráficos de pizza
+  // Atualizar datasets quando labels ou chartType mudam para gráficos de pizza/rosca
   useEffect(() => {
-    if (chartType === 'pie') {
+    if (chartType === 'pie' || chartType === 'doughnut') {
       const labelArray = labels.split(',').map(l => l.trim()).filter(Boolean);
       if (labelArray.length > 0) {
         setDatasets(prevDatasets => {
@@ -213,10 +213,10 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
       const exportRow = {
         'Título': data.title,
         'Tipo de Gráfico': data.chart_type,
-        'Formato de Valor': data.options?.valueFormat === 'currency' ? 'Monetário' : data.options?.valueFormat === 'percentage' ? 'Percentual' : 'Numérico',
+        'Formato de Valor': data.options?.valueFormat === 'currency' ? 'Monetário BRL' : data.options?.valueFormat === 'currency-usd' ? 'Monetário USD' : data.options?.valueFormat === 'percentage' ? 'Percentual' : 'Numérico',
         'Rótulos': data.labels.join(', '),
         'Conjunto de Dados': data.datasets.map(ds => `${ds.name}: ${ds.values.join(', ')}`).join(' | '),
-        'Cores': data.chart_type === 'pie' 
+        'Cores': (data.chart_type === 'pie' || data.chart_type === 'doughnut')
           ? (data.datasets[0]?.colors?.join(', ') || '')
           : data.datasets.map(ds => ds.color).join(', '),
       };
@@ -256,7 +256,8 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
       const row = rows[0];
       const importedTitle = row['Título'] || row['title'] || '';
       const importedChart = row['Tipo de Gráfico'] || row['chart_type'] || chartType;
-      const importedValueFormat = (row['Formato de Valor'] || row['value_format'] || '').toLowerCase().includes('monetário') ? 'currency' : (row['Formato de Valor'] || row['value_format'] || '').toLowerCase().includes('percentual') ? 'percentage' : 'number';
+      const formatStr = (row['Formato de Valor'] || row['value_format'] || '').toLowerCase();
+      const importedValueFormat = formatStr.includes('usd') || formatStr.includes('dólar') || formatStr.includes('dolar') ? 'currency-usd' : formatStr.includes('monetário') || formatStr.includes('monetario') || formatStr.includes('brl') ? 'currency' : formatStr.includes('percentual') ? 'percentage' : 'number';
       const importedLabels = row['Rótulos'] || row['labels'] || '';
       const importedDatasetStr = row['Conjunto de Dados'] || row['datasets'] || '';
       const importedColors = row['Cores'] || row['colors'] || '';
@@ -348,13 +349,15 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
           <option value="bar-horizontal">Barra Horizontal</option>
           <option value="line">Linha</option>
           <option value="pie">Pizza</option>
+          <option value="doughnut">Rosca</option>
         </select>
       </div>
       <div>
         <label className="block text-sm font-medium mb-1">Formato de Valor</label>
         <select value={valueFormat} onChange={(e) => setValueFormat(e.target.value)} className="w-full p-2 border rounded">
           <option value="number">Numérico (1.234,56)</option>
-          <option value="currency">Monetário (R$ 1.234,56)</option>
+          <option value="currency">Monetário BRL (R$ 1.234,56)</option>
+          <option value="currency-usd">Monetário USD ($ 1,234.56)</option>
           <option value="percentage">Percentual (45,6%)</option>
         </select>
       </div>
@@ -374,7 +377,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
       </div>
       
       <div>
-        <label className="block text-sm font-medium mb-1">Observações</label>
+        <label className="block text-sm font-medium mb-1">Análise Exxata</label>
         <textarea 
           value={observations} 
           onChange={(e) => setObservations(e.target.value)} 
@@ -384,8 +387,8 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
       </div>
       
       <div className="space-y-3">
-        <h3 className="font-medium">{chartType === 'pie' ? 'Cores das Fatias' : 'Conjunto de Dados'}</h3>
-        {chartType === 'pie' ? (
+        <h3 className="font-medium">{(chartType === 'pie' || chartType === 'doughnut') ? 'Cores das Fatias' : 'Conjunto de Dados'}</h3>
+        {(chartType === 'pie' || chartType === 'doughnut') ? (
           // Para gráficos de pizza, mostrar valores e cores por rótulo
           <div className="space-y-2">
             {labels.split(',').map((label, index) => (
@@ -522,6 +525,11 @@ export function ProjectDetails() {
   const [editingIndicator, setEditingIndicator] = useState(null);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const indicatorsContainerRef = useRef(null);
+  const conductsImportInputRef = useRef(null);
+  const panoramaImportInputRef = useRef(null);
+  
+  // Estado para modo "Visualizar como Cliente"
+  const [viewAsClient, setViewAsClient] = useState(false);
 
   // Filtros do Gantt
   const [activityStatus, setActivityStatus] = useState('all');
@@ -570,6 +578,7 @@ export function ProjectDetails() {
     updatePanoramaItem,
     deletePanoramaItem,
     addProjectFile,
+    deleteProjectFile,
     duplicateProjectActivity,
   } = useProjects();
   const project = getProjectById(projectId);
@@ -577,9 +586,14 @@ export function ProjectDetails() {
   const isAdmin = userRole === 'admin' || userRole === 'administrador';
   const isManager = userRole === 'manager' || userRole === 'gerente';
   const isCollaborator = userRole === 'collaborator' || userRole === 'colaborador' || userRole === 'consultor' || userRole === 'consultant';
-  const canEdit = isAdmin || isManager || isCollaborator || hasPermission('edit_projects');
+  
+  // Usuários que podem ativar o modo "Visualizar como Cliente"
+  const canViewAsClient = isAdmin || isManager || isCollaborator;
+  
+  // Permissões de edição consideram o modo viewAsClient
+  const canEdit = !viewAsClient && (isAdmin || isManager || isCollaborator || hasPermission('edit_projects'));
   // Consultor/Admin/Colaborador podem editar textos da aba Inteligência Humana
-  const canManageInsights = canEdit;
+  const canManageInsights = !viewAsClient && canEdit;
 
   // Atividades do projeto (persistidas no contexto)
   const activities = Array.isArray(project?.activities) ? project.activities : [];
@@ -777,7 +791,7 @@ export function ProjectDetails() {
   // Atividades: criar nova (apenas Exxata/admin)
   const [showAddActivity, setShowAddActivity] = useState(false);
   const [newActivity, setNewActivity] = useState({ customId: '', title: '', assignedTo: '', startDate: '', endDate: '', status: 'A Fazer' });
-  const canAddActivities = user && !(((user?.role || '').toLowerCase() === 'client') || ((user?.role || '').toLowerCase() === 'cliente'));
+  const canAddActivities = !viewAsClient && user && !(((user?.role || '').toLowerCase() === 'client') || ((user?.role || '').toLowerCase() === 'cliente'));
 
   const handleCreateActivity = async () => {
     if (!canAddActivities) return;
@@ -871,7 +885,7 @@ export function ProjectDetails() {
     try {
       await addProjectConduct(project.id, {
         text: '',
-        urgency: 'Normal'
+        urgency: 'Difícil'
       });
     } catch (error) {
       console.error('Erro ao adicionar conduta:', error);
@@ -954,12 +968,255 @@ export function ProjectDetails() {
     }
   };
 
+  // Exportar condutas para Excel
+  const handleExportConducts = () => {
+    try {
+      const conducts = Array.isArray(project.conducts) ? project.conducts : [];
+      
+      if (conducts.length === 0) {
+        alert('Não há condutas para exportar.');
+        return;
+      }
+
+      // Preparar dados para exportação
+      const exportData = conducts.map((c, index) => ({
+        'Ordem': index + 1,
+        'Conduta': c.text || '',
+        'Urgência': c.urgency || 'Difícil',
+        'ID': c.id || ''
+      }));
+
+      // Criar workbook e worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      
+      // Ajustar largura das colunas
+      const colWidths = [
+        { wch: 8 },  // Ordem
+        { wch: 60 }, // Conduta
+        { wch: 15 }, // Urgência
+        { wch: 30 }  // ID
+      ];
+      ws['!cols'] = colWidths;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Condutas');
+
+      // Gerar nome do arquivo
+      const projectName = project.name || 'Projeto';
+      const date = new Date().toISOString().split('T')[0];
+      const fileName = `${projectName}_Condutas_${date}.xlsx`;
+
+      // Download
+      XLSX.writeFile(wb, fileName);
+    } catch (error) {
+      console.error('Erro ao exportar condutas:', error);
+      alert('Erro ao exportar condutas. Tente novamente.');
+    }
+  };
+
+  // Importar condutas do Excel
+  const handleImportConducts = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+
+      if (rows.length === 0) {
+        alert('O arquivo Excel está vazio.');
+        return;
+      }
+
+      // Validar e processar dados
+      const validConducts = [];
+      for (const row of rows) {
+        const text = row['Conduta'] || row['conduta'] || '';
+        const urgency = row['Urgência'] || row['urgencia'] || row['Urgency'] || 'Difícil';
+        
+        if (text.trim()) {
+          validConducts.push({
+            text: text.trim(),
+            urgency: urgency
+          });
+        }
+      }
+
+      if (validConducts.length === 0) {
+        alert('Nenhuma conduta válida encontrada no arquivo.');
+        return;
+      }
+
+      // Confirmar importação
+      const confirmMsg = `Deseja importar ${validConducts.length} conduta(s)?\n\nIsso irá adicionar as condutas do arquivo às condutas existentes.`;
+      if (!confirm(confirmMsg)) return;
+
+      // Adicionar condutas
+      for (const conduct of validConducts) {
+        await addProjectConduct(project.id, conduct);
+      }
+
+      alert(`${validConducts.length} conduta(s) importada(s) com sucesso!`);
+    } catch (error) {
+      console.error('Erro ao importar condutas:', error);
+      alert('Erro ao importar condutas. Verifique o formato do arquivo.');
+    } finally {
+      // Limpar input
+      e.target.value = '';
+    }
+  };
+
+  // Exportar itens do Panorama Atual para Excel
+  const handleExportPanorama = () => {
+    try {
+      const panorama = project?.panorama || {};
+      
+      // Preparar dados para exportação
+      const exportData = [];
+      
+      const sections = [
+        { key: 'tecnica', title: 'Aspectos de Ordem Técnica' },
+        { key: 'fisica', title: 'Aspectos de Ordem Física' },
+        { key: 'economica', title: 'Aspectos de Ordem Econômica' }
+      ];
+
+      sections.forEach(({ key, title }) => {
+        const section = panorama[key] || {};
+        const items = section.items || [];
+        const status = section.status || 'green';
+        
+        items.forEach((item, index) => {
+          exportData.push({
+            'Seção': title,
+            'Status': status === 'green' ? 'Verde' : status === 'yellow' ? 'Amarelo' : 'Vermelho',
+            'Ordem': index + 1,
+            'Item': item.text || '',
+            'ID': item.id || ''
+          });
+        });
+      });
+
+      if (exportData.length === 0) {
+        alert('Não há itens no Panorama Atual para exportar.');
+        return;
+      }
+
+      // Criar workbook e worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      
+      // Ajustar largura das colunas
+      const colWidths = [
+        { wch: 30 }, // Seção
+        { wch: 12 }, // Status
+        { wch: 8 },  // Ordem
+        { wch: 60 }, // Item
+        { wch: 30 }  // ID
+      ];
+      ws['!cols'] = colWidths;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Panorama Atual');
+
+      // Gerar nome do arquivo
+      const projectName = project.name || 'Projeto';
+      const date = new Date().toISOString().split('T')[0];
+      const fileName = `${projectName}_Panorama_Atual_${date}.xlsx`;
+
+      // Download
+      XLSX.writeFile(wb, fileName);
+    } catch (error) {
+      console.error('Erro ao exportar Panorama Atual:', error);
+      alert('Erro ao exportar Panorama Atual. Tente novamente.');
+    }
+  };
+
+  // Importar itens do Panorama Atual do Excel
+  const handleImportPanorama = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+
+      if (rows.length === 0) {
+        alert('O arquivo Excel está vazio.');
+        return;
+      }
+
+      // Mapear seções
+      const sectionMap = {
+        'Aspectos de Ordem Técnica': 'tecnica',
+        'Aspectos de Ordem Física': 'fisica',
+        'Aspectos de Ordem Econômica': 'economica'
+      };
+
+      const statusMap = {
+        'Verde': 'green',
+        'Amarelo': 'yellow',
+        'Vermelho': 'red'
+      };
+
+      // Agrupar itens por seção
+      const itemsBySection = {
+        tecnica: [],
+        fisica: [],
+        economica: []
+      };
+
+      for (const row of rows) {
+        const sectionTitle = row['Seção'] || row['Secao'] || '';
+        const sectionKey = sectionMap[sectionTitle];
+        const itemText = row['Item'] || row['item'] || '';
+        
+        if (sectionKey && itemText.trim()) {
+          itemsBySection[sectionKey].push(itemText.trim());
+        }
+      }
+
+      const totalItems = Object.values(itemsBySection).reduce((sum, items) => sum + items.length, 0);
+
+      if (totalItems === 0) {
+        alert('Nenhum item válido encontrado no arquivo.');
+        return;
+      }
+
+      // Confirmar importação
+      const confirmMsg = `Deseja importar ${totalItems} item(ns)?\n\n` +
+        `Técnica: ${itemsBySection.tecnica.length}\n` +
+        `Física: ${itemsBySection.fisica.length}\n` +
+        `Econômica: ${itemsBySection.economica.length}\n\n` +
+        `Isso irá adicionar os itens do arquivo aos itens existentes.`;
+      
+      if (!confirm(confirmMsg)) return;
+
+      // Adicionar itens
+      for (const [sectionKey, items] of Object.entries(itemsBySection)) {
+        for (const itemText of items) {
+          await addPanoramaItem(project.id, sectionKey, itemText);
+        }
+      }
+
+      alert(`${totalItems} item(ns) importado(s) com sucesso!`);
+    } catch (error) {
+      console.error('Erro ao importar Panorama Atual:', error);
+      alert('Erro ao importar Panorama Atual. Verifique o formato do arquivo.');
+    } finally {
+      // Limpar input
+      e.target.value = '';
+    }
+  };
+
   // Arquivos: helpers e permissões
   const FILES_PAGE_SIZE = 10;
   const isClientUser = ((user?.role || '').toLowerCase() === 'client' || (user?.role || '').toLowerCase() === 'cliente');
-  const canManageIndicators = !isClientUser && canEdit;
-  const canUploadTo = (source) => !isClientUser || source === 'client';
-  const canDeleteFiles = isAdmin || isManager || hasPermission('delete_projects') || hasPermission('edit_projects');
+  const canManageIndicators = !viewAsClient && !isClientUser && canEdit;
+  const canUploadTo = (source) => !viewAsClient && (!isClientUser || source === 'client');
+  const canDeleteFiles = !viewAsClient && (isAdmin || isManager || hasPermission('delete_projects') || hasPermission('edit_projects'));
 
   const FileKindIcon = ({ ext }) => {
     const e = (ext || '').toLowerCase();
@@ -1108,6 +1365,13 @@ export function ProjectDetails() {
   };
 
   const handleRemoveMember = async (userId, memberName) => {
+    // Verificar se o usuário tem permissão para remover membros
+    if (!hasPermission('manage_team')) {
+      alert('Você não tem permissão para remover membros. Função restrita ao administrador e gerente.');
+      setMemberMenuOpen(null); // Fechar menu
+      return;
+    }
+    
     if (!window.confirm(`Tem certeza que deseja remover ${memberName} do projeto?`)) {
       return;
     }
@@ -1166,7 +1430,7 @@ export function ProjectDetails() {
     loadData();
   }, [project?.id, user?.id]);
 
-  // Funções para export/import de indicadores
+  // Funções para export/import de indicadores - MODELO DE 3 ABAS
   const handleExportIndicators = () => {
     try {
       const indicators = project?.project_indicators || [];
@@ -1175,38 +1439,102 @@ export function ProjectDetails() {
         return;
       }
 
-      // Preparar dados para Excel
-      const exportData = indicators.map(indicator => ({
-        'Título': indicator.title,
-        'Tipo de Gráfico': indicator.chart_type,
-        'Rótulos': Array.isArray(indicator.labels) ? indicator.labels.join(', ') : '',
-        'Conjunto de Dados': Array.isArray(indicator.datasets) ? indicator.datasets.map(ds => `${ds.name}: ${ds.values.join(', ')}`).join(' | ') : '',
-        'Cores': Array.isArray(indicator.datasets) ? indicator.datasets.map(ds => ds.color).join(', ') : '',
-        'Criado em': new Date(indicator.created_at).toLocaleString('pt-BR'),
-        'Atualizado em': new Date(indicator.updated_at).toLocaleString('pt-BR'),
-      }));
-
       // Criar workbook
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet(exportData);
 
-      // Auto-ajustar largura das colunas
-      const colWidths = [
-        { wch: 30 }, // Título
-        { wch: 15 }, // Tipo de Gráfico
-        { wch: 40 }, // Rótulos
-        { wch: 60 }, // Conjunto de Dados
-        { wch: 30 }, // Cores
-        { wch: 20 }, // Criado em
-        { wch: 20 }, // Atualizado em
+      // ===== ABA 1: CONFIGURAÇÕES =====
+      const configData = indicators.map((indicator, index) => ({
+        'ID': `G${index + 1}`,
+        'Título': indicator.title,
+        'Tipo': indicator.chart_type || 'bar',
+        'Formato': indicator.options?.valueFormat || 'Numérico'
+      }));
+
+      const wsConfig = XLSX.utils.json_to_sheet(configData);
+      wsConfig['!cols'] = [
+        { wch: 8 },  // ID
+        { wch: 40 }, // Título
+        { wch: 15 }, // Tipo
+        { wch: 15 }  // Formato
       ];
-      ws['!cols'] = colWidths;
+      XLSX.utils.book_append_sheet(wb, wsConfig, 'Configurações');
 
-      XLSX.utils.book_append_sheet(wb, ws, 'Indicadores');
-      
+      // ===== ABA 2: DADOS =====
+      const dataRows = [];
+      indicators.forEach((indicator, index) => {
+        const graphId = `G${index + 1}`;
+        const labels = Array.isArray(indicator.labels) ? indicator.labels : [];
+        const datasets = Array.isArray(indicator.datasets) ? indicator.datasets : [];
+
+        datasets.forEach(dataset => {
+          const row = {
+            'ID_Gráfico': graphId,
+            'Dataset': dataset.name || 'Série 1'
+          };
+          
+          // Adicionar valores para cada rótulo
+          labels.forEach((label, labelIndex) => {
+            const value = dataset.values?.[labelIndex];
+            row[label] = value !== undefined && value !== null ? value : '';
+          });
+
+          dataRows.push(row);
+        });
+      });
+
+      const wsData = XLSX.utils.json_to_sheet(dataRows);
+      // Largura dinâmica baseada no número de colunas
+      const dataColWidths = [
+        { wch: 12 }, // ID_Gráfico
+        { wch: 20 }, // Dataset
+        ...Array(Math.max(...indicators.map(i => (i.labels || []).length))).fill({ wch: 15 })
+      ];
+      wsData['!cols'] = dataColWidths;
+      XLSX.utils.book_append_sheet(wb, wsData, 'Dados');
+
+      // ===== ABA 3: CORES =====
+      const colorRows = [];
+      indicators.forEach((indicator, index) => {
+        const graphId = `G${index + 1}`;
+        const datasets = Array.isArray(indicator.datasets) ? indicator.datasets : [];
+
+        datasets.forEach(dataset => {
+          // Para pizza/rosca exportar cores por fatia (uma linha por rótulo)
+          if ((indicator.chart_type === 'pie' || indicator.chart_type === 'doughnut') && Array.isArray(indicator.labels)) {
+            const sliceColors = Array.isArray(dataset.colors) ? dataset.colors : [];
+            indicator.labels.forEach((label, i) => {
+              colorRows.push({
+                'ID_Gráfico': graphId,
+                'Dataset': dataset.name || 'Série 1',
+                'Rótulo': label,
+                'Cor': sliceColors[i] || '#8884d8'
+              });
+            });
+          } else {
+            // Demais tipos seguem com cor por dataset
+            colorRows.push({
+              'ID_Gráfico': graphId,
+              'Dataset': dataset.name || 'Série 1',
+              'Cor': dataset.color || '#8884d8'
+            });
+          }
+        });
+      });
+
+      const wsColors = XLSX.utils.json_to_sheet(colorRows);
+      wsColors['!cols'] = [
+        { wch: 12 }, // ID_Gráfico
+        { wch: 20 }, // Dataset
+        { wch: 20 }, // Rótulo (opcional para pizza/rosca)
+        { wch: 15 }  // Cor
+      ];
+      XLSX.utils.book_append_sheet(wb, wsColors, 'Cores');
+
       // Download do arquivo
       const fileName = `indicadores_${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(wb, fileName);
+      
+      alert(`${indicators.length} indicador(es) exportado(s) com sucesso em formato de 3 abas!`);
     } catch (error) {
       console.error('Erro ao exportar indicadores:', error);
       alert('Erro ao exportar indicadores. Tente novamente.');
@@ -1589,7 +1917,7 @@ export function ProjectDetails() {
           pdf.setFontSize(9);
           pdf.setFont('helvetica', 'bold');
           pdf.setTextColor(...exxataNavy);
-          pdf.text('Observações:', margin + 8, yPosition + 5);
+          pdf.text('Análise Exxata:', margin + 8, yPosition + 5);
           
           // Texto das observações
           pdf.setFont('helvetica', 'normal');
@@ -1631,7 +1959,7 @@ export function ProjectDetails() {
         yPosition += 10;
 
         // Ordenar condutas por urgência
-        const urgencyOrder = { 'Crise': 5, 'Complexo': 4, 'Complicado': 3, 'Difícil': 2, 'Fácil': 1, 'Normal': 0 };
+        const urgencyOrder = { 'Crise': 5, 'Complexo': 4, 'Complicado': 3, 'Difícil': 2, 'Fácil': 1 };
         const sortedConducts = [...conducts].sort((a, b) => 
           (urgencyOrder[b.urgency] || 0) - (urgencyOrder[a.urgency] || 0)
         );
@@ -1819,6 +2147,215 @@ export function ProjectDetails() {
     try {
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data);
+
+      // Verificar se tem as 3 abas necessárias
+      const hasConfigSheet = wb.SheetNames.includes('Configurações') || wb.SheetNames.includes('Configuracoes');
+      const hasDataSheet = wb.SheetNames.includes('Dados');
+      const hasColorSheet = wb.SheetNames.includes('Cores');
+
+      // Se não tiver as 3 abas, tentar formato antigo (compatibilidade)
+      if (!hasConfigSheet || !hasDataSheet) {
+        return await handleImportLegacyFormat(wb, event);
+      }
+
+      // ===== PROCESSAR FORMATO DE 3 ABAS =====
+
+      // Ler aba de Configurações
+      const configSheetName = wb.SheetNames.find(name => name === 'Configurações' || name === 'Configuracoes');
+      const configData = XLSX.utils.sheet_to_json(wb.Sheets[configSheetName]);
+
+      if (configData.length === 0) {
+        alert('A aba "Configurações" está vazia.');
+        return;
+      }
+
+      // Ler aba de Dados
+      const dataData = XLSX.utils.sheet_to_json(wb.Sheets['Dados']);
+
+      if (dataData.length === 0) {
+        alert('A aba "Dados" está vazia.');
+        return;
+      }
+
+      // Ler aba de Cores (opcional)
+      const colorData = hasColorSheet ? XLSX.utils.sheet_to_json(wb.Sheets['Cores']) : [];
+
+      // Agrupar dados por ID_Gráfico
+      const graphsMap = new Map();
+
+      // Processar configurações
+      configData.forEach(row => {
+        const id = row['ID'] || row['id'];
+        if (!id) return;
+
+        graphsMap.set(id, {
+          id,
+          title: row['Título'] || row['Titulo'] || row['title'] || '',
+          chart_type: row['Tipo'] || row['tipo'] || row['type'] || 'bar',
+          valueFormat: row['Formato'] || row['formato'] || row['format'] || 'Numérico',
+          labels: [],
+          datasets: []
+        });
+      });
+
+      // Processar dados
+      dataData.forEach(row => {
+        const graphId = row['ID_Gráfico'] || row['ID_Grafico'] || row['id'];
+        const datasetName = row['Dataset'] || row['dataset'];
+        
+        if (!graphId || !datasetName) return;
+
+        const graph = graphsMap.get(graphId);
+        if (!graph) return;
+
+        // Extrair rótulos (todas as colunas exceto ID_Gráfico e Dataset)
+        const labels = Object.keys(row).filter(key => 
+          key !== 'ID_Gráfico' && key !== 'ID_Grafico' && key !== 'id' && 
+          key !== 'Dataset' && key !== 'dataset'
+        );
+
+        // Se ainda não temos labels, definir agora
+        if (graph.labels.length === 0) {
+          graph.labels = labels;
+        }
+
+        // Extrair valores
+        const values = labels.map(label => {
+          const val = row[label];
+          return val !== undefined && val !== null && val !== '' ? parseFloat(val) : 0;
+        });
+
+        // Adicionar dataset
+        graph.datasets.push({
+          name: datasetName,
+          values,
+          color: '#8884d8' // Cor padrão, será substituída se houver na aba Cores
+        });
+      });
+
+      // Processar cores
+      colorData.forEach(row => {
+        const graphId = row['ID_Gráfico'] || row['ID_Grafico'] || row['id'];
+        const datasetName = row['Dataset'] || row['dataset'];
+        const color = row['Cor'] || row['cor'] || row['color'];
+        const labelName = row['Rótulo'] || row['Rotulo'] || row['rotulo'] || row['label'];
+
+        if (!graphId || !datasetName || !color) return;
+
+        const graph = graphsMap.get(graphId);
+        if (!graph) return;
+
+        // Encontrar dataset
+        const dataset = graph.datasets.find(ds => ds.name === datasetName) || graph.datasets[0];
+        if (!dataset) return;
+
+        // Para pizza/rosca: permitir cores por fatia (array colors alinhado a labels)
+        if (graph.chart_type === 'pie' || graph.chart_type === 'doughnut') {
+          const labels = Array.isArray(graph.labels) ? graph.labels : [];
+          const idx = labelName ? labels.findIndex(l => String(l).trim() === String(labelName).trim()) : -1;
+          if (!Array.isArray(dataset.colors)) dataset.colors = Array(labels.length).fill('#8884d8');
+          if (idx >= 0) {
+            dataset.colors[idx] = color;
+          } else if (labels.length > 0) {
+            // Se não especificou rótulo, preencher sequencialmente a próxima posição vazia
+            const next = dataset.colors.findIndex(c => !c || c === '#8884d8');
+            const target = next >= 0 ? next : 0;
+            dataset.colors[target] = color;
+          }
+        } else {
+          // Demais tipos: cor por dataset
+          dataset.color = color;
+        }
+      });
+
+      // Normalizar datasets para pizza/rosca: usar apenas um dataset e garantir array de cores alinhado
+      graphsMap.forEach((graph) => {
+        if (graph.chart_type === 'pie' || graph.chart_type === 'doughnut') {
+          if (!graph.datasets[0]) {
+            graph.datasets = [{ name: 'Série 1', values: [], colors: [] }];
+          } else {
+            graph.datasets = [{
+              name: graph.datasets[0].name || 'Série 1',
+              values: Array.isArray(graph.datasets[0].values) ? graph.datasets[0].values : [],
+              colors: Array.isArray(graph.datasets[0].colors) ? graph.datasets[0].colors : []
+            }];
+          }
+          // Garantir que cores tenha mesmo tamanho de labels
+          const labelCount = Array.isArray(graph.labels) ? graph.labels.length : 0;
+          const ds0 = graph.datasets[0];
+          if (!Array.isArray(ds0.colors)) ds0.colors = [];
+          while (ds0.colors.length < labelCount) ds0.colors.push('#8884d8');
+          // Garantir que values tenha mesmo tamanho de labels
+          if (!Array.isArray(ds0.values)) ds0.values = [];
+          while (ds0.values.length < labelCount) ds0.values.push(0);
+        }
+      });
+
+      // Converter Map para array de indicadores
+      const indicatorsToImport = Array.from(graphsMap.values())
+        .filter(graph => graph.title && graph.datasets.length > 0)
+        .map(graph => ({
+          title: graph.title,
+          chart_type: graph.chart_type,
+          labels: graph.labels,
+          datasets: graph.datasets,
+          options: {
+            valueFormat: graph.valueFormat
+          }
+        }));
+
+      if (indicatorsToImport.length === 0) {
+        alert('Nenhum indicador válido encontrado no arquivo.');
+        return;
+      }
+
+      // Confirmar importação
+      const confirmed = window.confirm(
+        `Encontrados ${indicatorsToImport.length} indicador(es) para importar:\n\n` +
+        indicatorsToImport.map(ind => `• ${ind.title} (${ind.chart_type})`).join('\n') +
+        `\n\nDeseja prosseguir? Indicadores existentes com o mesmo título serão atualizados.`
+      );
+      
+      if (!confirmed) return;
+
+      // Importar indicadores
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const indicatorData of indicatorsToImport) {
+        try {
+          // Verificar se já existe um indicador com o mesmo título
+          const existing = project.project_indicators?.find(ind => ind.title === indicatorData.title);
+          
+          if (existing) {
+            await updateProjectIndicator(project.id, existing.id, indicatorData);
+          } else {
+            await addProjectIndicator(project.id, indicatorData);
+          }
+          successCount++;
+        } catch (error) {
+          console.error('Erro ao importar indicador:', indicatorData.title, error);
+          errorCount++;
+        }
+      }
+
+      const message = errorCount > 0
+        ? `${successCount} indicador(es) importado(s) com sucesso!\n${errorCount} erro(s) encontrado(s).`
+        : `${successCount} indicador(es) importado(s) com sucesso!`;
+      
+      alert(message);
+    } catch (error) {
+      console.error('Erro ao importar arquivo:', error);
+      alert('Erro ao processar o arquivo. Verifique se é um arquivo Excel válido com as abas: Configurações, Dados e Cores.');
+    }
+
+    // Limpar input
+    event.target.value = null;
+  };
+
+  // Função auxiliar para importar formato antigo (compatibilidade)
+  const handleImportLegacyFormat = async (wb, event) => {
+    try {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(ws);
 
@@ -1827,7 +2364,7 @@ export function ProjectDetails() {
         return;
       }
 
-      // Processar dados importados
+      // Processar dados importados (formato antigo)
       const indicatorsToImport = [];
       for (const row of jsonData) {
         try {
@@ -1877,14 +2414,13 @@ export function ProjectDetails() {
       }
 
       // Confirmar importação
-      const confirmed = window.confirm(`Encontrados ${indicatorsToImport.length} indicadores para importar. Deseja prosseguir? Indicadores existentes com o mesmo título serão atualizados.`);
+      const confirmed = window.confirm(`Encontrados ${indicatorsToImport.length} indicadores para importar (formato antigo). Deseja prosseguir?`);
       if (!confirmed) return;
 
       // Importar indicadores
       let successCount = 0;
       for (const indicatorData of indicatorsToImport) {
         try {
-          // Verificar se já existe um indicador com o mesmo título
           const existing = project.project_indicators?.find(ind => ind.title === indicatorData.title);
           
           if (existing) {
@@ -1900,12 +2436,9 @@ export function ProjectDetails() {
 
       alert(`${successCount} indicadores importados com sucesso!`);
     } catch (error) {
-      console.error('Erro ao importar arquivo:', error);
-      alert('Erro ao processar o arquivo. Verifique se é um arquivo Excel válido.');
+      console.error('Erro ao importar formato antigo:', error);
+      alert('Erro ao processar o arquivo no formato antigo.');
     }
-
-    // Limpar input
-    event.target.value = null;
   };
 
   // Mostrar loading enquanto autenticação está sendo verificada
@@ -2026,6 +2559,28 @@ export function ProjectDetails() {
               {project.exxataActivities.length > 1 ? ` +${project.exxataActivities.length - 1}` : ''}
             </Badge>
           )}
+          
+          {/* Botão Toggle "Visualizar como Cliente" */}
+          {canViewAsClient && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white">
+              <Eye className={`h-4 w-4 ${viewAsClient ? 'text-blue-600' : 'text-slate-400'}`} />
+              <span className="text-sm font-medium text-slate-700">Visualizar como Cliente</span>
+              <button
+                onClick={() => setViewAsClient(!viewAsClient)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  viewAsClient ? 'bg-blue-600' : 'bg-slate-300'
+                }`}
+                title={viewAsClient ? 'Desativar modo visualização de cliente' : 'Ativar modo visualização de cliente'}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    viewAsClient ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
+          
           <Button
             variant="destructive"
             size="sm"
@@ -2037,6 +2592,14 @@ export function ProjectDetails() {
               }
               const confirmed = window.confirm('Tem certeza que deseja excluir este projeto? Esta ação é definitiva e não poderá ser desfeita.');
               if (!confirmed) return;
+              
+              // Segunda confirmação: digitar "exxata"
+              const confirmText = window.prompt('Para confirmar a exclusão, digite "exxata" (sem aspas):');
+              if (confirmText !== 'exxata') {
+                alert('Texto de confirmação incorreto. Exclusão cancelada.');
+                return;
+              }
+              
               // Excluir e voltar para a lista de projetos
               deleteProject(project.id);
               navigate('/projects');
@@ -2048,6 +2611,19 @@ export function ProjectDetails() {
           </Button>
         </div>
       </div>
+
+      {/* Banner de Feedback Visual quando modo "Visualizar como Cliente" está ativo */}
+      {viewAsClient && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+          <div className="flex items-center gap-2 text-blue-700">
+            <Eye className="h-5 w-5" />
+            <span className="font-medium">Modo Visualização de Cliente Ativo</span>
+            <span className="text-sm text-blue-600">
+              (Edições desabilitadas temporariamente)
+            </span>
+          </div>
+        </div>
+      )}
 
       <Tabs value={activeTab} className="space-y-4" onValueChange={setActiveTab}>
         <div className="flex justify-between items-center">
@@ -2079,7 +2655,7 @@ export function ProjectDetails() {
           {activeTab === 'indicators' && null}
         </div>
 
-        <TabsContent value="preliminary" className="pl-4">
+        <TabsContent value="preliminary" className="pl-4 pb-8">
           <div className="grid gap-4 md:grid-cols-3">
             {[ 
               { key: 'overview', title: 'Visão Geral', desc: 'Resumo do projeto com dados principais.', icon: <TrendingUp className="h-5 w-5 text-exxata-red" /> },
@@ -2103,11 +2679,12 @@ export function ProjectDetails() {
           </div>
         </TabsContent>
 
-        <TabsContent value="overview" className="space-y-4 pl-4">
+        <TabsContent value="overview" className="space-y-4 pl-4 pb-8">
           <OverviewGrid 
             project={project} 
             user={user} 
-            canEdit={canEdit} 
+            canEdit={canEdit}
+            viewAsClient={viewAsClient}
             updateProject={updateProject}
             updateProjectBackend={updateProjectBackend}
             teamMembers={loadedProjectMembers.length > 0 ? loadedProjectMembers : projectMembers}
@@ -2115,7 +2692,7 @@ export function ProjectDetails() {
         </TabsContent>
 
         {/* INDICADORES */}
-        <TabsContent value="indicators" className="space-y-4 pl-4">
+        <TabsContent value="indicators" className="space-y-4 pl-4 pb-8">
           <div className="flex gap-2 mb-3">
             {canEdit && (
               <Button onClick={() => { setEditingIndicator(null); setShowIndicatorModal(true); }} size="sm" className="gap-1">
@@ -2184,7 +2761,7 @@ export function ProjectDetails() {
                         <div className="flex items-start gap-2">
                           <FileText className="h-4 w-4 text-slate-500 mt-0.5 flex-shrink-0" />
                           <div className="flex-1">
-                            <p className="text-xs font-medium text-slate-700 mb-1">Observações</p>
+                            <p className="text-xs font-medium text-slate-700 mb-1">Análise Exxata</p>
                             <p className="text-sm text-slate-600 whitespace-pre-wrap">{indicator.observations}</p>
                           </div>
                         </div>
@@ -2258,7 +2835,7 @@ export function ProjectDetails() {
         </TabsContent>
 
         {/* ... */}
-        <TabsContent value="documents" className="pl-4">
+        <TabsContent value="documents" className="pl-4 pb-8">
           {(() => {
             const allFiles = Array.isArray(project.files) ? project.files : [];
             const qClient = searchClient.trim().toLowerCase();
@@ -2409,7 +2986,7 @@ export function ProjectDetails() {
           })()}
         </TabsContent>
 
-        <TabsContent value="team" className="pl-4">
+        <TabsContent value="team" className="pl-4 pb-8">
           {showAddMember && (
             <div className="fixed inset-0 z-40 flex items-center justify-center">
               <div className="absolute inset-0 bg-black/30" onClick={() => setShowAddMember(false)} />
@@ -2519,7 +3096,7 @@ export function ProjectDetails() {
           </Card>
         </TabsContent>
  
-        <TabsContent value="activities" className="pl-4">
+        <TabsContent value="activities" className="pl-4 pb-8">
           <Card className="bg-white border border-slate-200 shadow-sm">
             <CardHeader>
               <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -2970,7 +3547,38 @@ export function ProjectDetails() {
         </TabsContent>
 
         {/* PANORAMA ATUAL */}
-        <TabsContent value="panorama" className="pl-4">
+        <TabsContent value="panorama" className="pl-4 pb-8">
+          <div className="flex items-center justify-end gap-2 mb-4">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={handleExportPanorama}
+              className="gap-1"
+            >
+              <Download className="h-4 w-4" />
+              Exportar Excel
+            </Button>
+            {canManageInsights && (
+              <>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => panoramaImportInputRef.current?.click()}
+                  className="gap-1"
+                >
+                  <Upload className="h-4 w-4" />
+                  Importar Excel
+                </Button>
+                <input
+                  ref={panoramaImportInputRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleImportPanorama}
+                  style={{ display: 'none' }}
+                />
+              </>
+            )}
+          </div>
           <div className="grid gap-4 md:grid-cols-3">
             {[
               { key: 'tecnica', title: 'Aspectos de Ordem Técnica' },
@@ -3046,7 +3654,7 @@ export function ProjectDetails() {
           </div>
         </TabsContent>
 
-        <TabsContent value="ai-insights" className="pl-4">
+        <TabsContent value="ai-insights" className="pl-4 pb-8">
           <div className="grid gap-4 md:grid-cols-2">
             {/* Análise Preditiva */}
             <Card>
@@ -3082,9 +3690,38 @@ export function ProjectDetails() {
                   <Zap className="h-5 w-5 mr-2 text-exxata-red" />
                   Condutas
                 </CardTitle>
-                {canManageInsights && (
-                  <Button size="sm" onClick={addConduct}>Adicionar</Button>
-                )}
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleExportConducts}
+                    className="gap-1"
+                  >
+                    <Download className="h-4 w-4" />
+                    Exportar Excel
+                  </Button>
+                  {canManageInsights && (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => conductsImportInputRef.current?.click()}
+                        className="gap-1"
+                      >
+                        <Upload className="h-4 w-4" />
+                        Importar Excel
+                      </Button>
+                      <input
+                        ref={conductsImportInputRef}
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={handleImportConducts}
+                        style={{ display: 'none' }}
+                      />
+                      <Button size="sm" onClick={addConduct}>Adicionar</Button>
+                    </>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="border rounded-lg overflow-hidden">
@@ -3110,7 +3747,7 @@ export function ProjectDetails() {
                       <div className="px-3 py-4 text-sm text-slate-500">Nenhuma conduta cadastrada.</div>
                     ) : (
                       (() => {
-                        const urgencyOrder = { 'Crise': 5, 'Complexo': 4, 'Complicado': 3, 'Difícil': 2, 'Fácil': 1, 'Normal': 0 };
+                        const urgencyOrder = { 'Crise': 5, 'Complexo': 4, 'Complicado': 3, 'Difícil': 2, 'Fácil': 1 };
                         let sortedConducts = [...project.conducts];
                         
                         if (conductSortOrder === 'asc') {
@@ -3160,7 +3797,7 @@ export function ProjectDetails() {
                           <div className="col-span-3 flex items-center justify-end gap-2">
                             {canManageInsights ? (
                               <>
-                                <Select value={c.urgency || 'Normal'} onValueChange={(v) => updateConduct(c.id, { urgency: v })}>
+                                <Select value={c.urgency || 'Difícil'} onValueChange={(v) => updateConduct(c.id, { urgency: v })}>
                                   <SelectTrigger className="h-8 w-[140px]"><SelectValue placeholder="Urgência" /></SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="Fácil">Fácil</SelectItem>
@@ -3188,7 +3825,7 @@ export function ProjectDetails() {
                                   'bg-slate-200 text-slate-700'
                                 }`}
                               >
-                                {c.urgency || 'Normal'}
+                                {c.urgency || 'Difícil'}
                               </span>
                             )}
                           </div>
