@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList, LineChart, Line, PieChart, Pie, Cell, ComposedChart } from 'recharts';
 
 const formatValue = (value, format, opts = {}) => {
   // Coerce numeric strings to numbers before formatting
@@ -80,16 +80,26 @@ const renderLineLabelTop = (valueFormat) => (props) => {
   );
 };
 
-const CustomTooltip = ({ active, payload, label, valueFormat }) => {
+const CustomTooltip = ({ active, payload, label, valueFormat, datasets }) => {
   if (active && payload && payload.length) {
     // For Pie charts, 'label' may be undefined; fallback to the slice name from payload
     const displayLabel = label ?? payload[0]?.payload?.name ?? payload[0]?.name ?? '';
     return (
       <div className="bg-white p-2 border border-gray-200 rounded shadow-lg">
         <p className="label font-bold">{displayLabel}</p>
-        {payload.map((p, index) => (
-          <p key={index} style={{ color: p.color }}>{`${p.name}: ${formatValue(p.value, valueFormat)}`}</p>
-        ))}
+        {payload.map((p, index) => {
+          // Para gráficos combo, buscar o formato específico do dataset
+          let format = valueFormat;
+          if (datasets && Array.isArray(datasets)) {
+            const dataset = datasets.find(ds => ds.name === p.name || ds.name === p.dataKey);
+            if (dataset && dataset.valueFormat) {
+              format = dataset.valueFormat;
+            }
+          }
+          return (
+            <p key={index} style={{ color: p.color }}>{`${p.name}: ${formatValue(p.value, format)}`}</p>
+          );
+        })}
       </div>
     );
   }
@@ -132,7 +142,7 @@ const IndicatorChart = ({ indicator }) => {
     return (
       <div style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer>
-          <BarChart data={data} layout="vertical" margin={{ top: 20, right: 60, left: 20, bottom: 5 }}>
+          <BarChart data={data} layout="vertical" margin={{ top: 20, right: 60, left: 60, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis
               type="number"
@@ -159,7 +169,7 @@ const IndicatorChart = ({ indicator }) => {
     return (
       <div style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer>
-          <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+          <BarChart data={data} margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="name" />
             <YAxis
@@ -185,7 +195,7 @@ const IndicatorChart = ({ indicator }) => {
     return (
       <div style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer>
-          <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+          <LineChart data={data} margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="name" />
             <YAxis
@@ -202,6 +212,107 @@ const IndicatorChart = ({ indicator }) => {
               </Line>
             ))}
           </LineChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+
+  if (type === 'combo') {
+    // Verificar se há datasets com eixos diferentes
+    const hasLeftAxis = datasets.some(ds => !ds.yAxisId || ds.yAxisId === 'left');
+    const hasRightAxis = datasets.some(ds => ds.yAxisId === 'right');
+    
+    // Obter formatos e limites por eixo
+    const leftFormat = datasets.find(ds => !ds.yAxisId || ds.yAxisId === 'left')?.valueFormat || valueFormat;
+    const rightFormat = datasets.find(ds => ds.yAxisId === 'right')?.valueFormat || valueFormat;
+    
+    // Obter limites configurados
+    const leftAxisConfig = options?.leftAxis || {};
+    const rightAxisConfig = options?.rightAxis || {};
+    
+    // Função para calcular domínio do eixo
+    const getDomain = (axisConfig, defaultFormat) => {
+      const min = axisConfig.min !== undefined && axisConfig.min !== null && axisConfig.min !== '' 
+        ? Number(axisConfig.min) 
+        : 0;
+      const max = axisConfig.max !== undefined && axisConfig.max !== null && axisConfig.max !== '' 
+        ? Number(axisConfig.max) 
+        : 'auto';
+      
+      if (max === 'auto') {
+        return [min, (dataMax) => (typeof dataMax === 'number' ? dataMax * 1.1 : dataMax)];
+      }
+      return [min, max];
+    };
+
+    return (
+      <div style={{ width: '100%', height: 300 }}>
+        <ResponsiveContainer>
+          <ComposedChart data={data} margin={{ top: 20, right: hasRightAxis ? 80 : 30, left: 80, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            
+            {/* Eixo Y Esquerdo */}
+            {hasLeftAxis && (
+              <YAxis
+                yAxisId="left"
+                orientation="left"
+                domain={getDomain(leftAxisConfig, leftFormat)}
+                tickFormatter={(v) => formatValue(v, leftFormat, { compact: true })}
+                label={leftAxisConfig.title ? { value: leftAxisConfig.title, angle: -90, position: 'insideLeft', offset: -50, style: { textAnchor: 'middle' } } : undefined}
+              />
+            )}
+            
+            {/* Eixo Y Direito */}
+            {hasRightAxis && (
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                domain={getDomain(rightAxisConfig, rightFormat)}
+                tickFormatter={(v) => formatValue(v, rightFormat, { compact: true })}
+                label={rightAxisConfig.title ? { value: rightAxisConfig.title, angle: 90, position: 'insideRight', offset: -50, style: { textAnchor: 'middle' } } : undefined}
+              />
+            )}
+            
+            <Tooltip content={<CustomTooltip valueFormat={valueFormat} datasets={datasets} />} />
+            <Legend content={<CustomLegend valueFormat={valueFormat} />} />
+            
+            {datasets.map((dataset, index) => {
+              const axisId = dataset.yAxisId || 'left';
+              const dsFormat = dataset.valueFormat || (axisId === 'right' ? rightFormat : leftFormat);
+              
+              // Renderizar como linha se chartType for 'line', caso contrário como barra
+              if (dataset.chartType === 'line') {
+                return (
+                  <Line 
+                    key={index} 
+                    yAxisId={axisId}
+                    type="monotone" 
+                    dataKey={dataset.name} 
+                    stroke={dataset.color || '#8884d8'} 
+                    strokeWidth={2}
+                    activeDot={{ r: 8 }}
+                  >
+                    {showDataLabels && (
+                      <LabelList dataKey={dataset.name} content={renderLineLabelTop(dsFormat)} />
+                    )}
+                  </Line>
+                );
+              }
+              return (
+                <Bar 
+                  key={index} 
+                  yAxisId={axisId}
+                  dataKey={dataset.name} 
+                  fill={dataset.color || '#8884d8'}
+                >
+                  {showDataLabels && (
+                    <LabelList dataKey={dataset.name} content={renderBarLabelTop(dsFormat)} />
+                  )}
+                </Bar>
+              );
+            })}
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     );

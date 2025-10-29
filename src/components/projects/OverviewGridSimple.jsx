@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import { 
-  BarChart3, DollarSign, MapPin, Calendar, Users, Plus, X, Edit3, FileText, GripVertical, Download, Upload, CalendarCheck
+  BarChart3, DollarSign, MapPin, Calendar, Users, Plus, X, Edit3, FileText, GripVertical, Download, Upload, CalendarCheck, Maximize2, Minimize2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -241,114 +241,143 @@ export default function OverviewGridSimple({ project, user, canEdit, viewAsClien
     }
   };
 
+  // Função para alternar tamanho do widget (1 coluna ou 2 colunas)
+  const toggleWidgetSize = async (id) => {
+    const nextWidgets = widgets.map(w => {
+      if (w.id === id) {
+        return {
+          ...w,
+          size: w.size === 'large' ? 'normal' : 'large'
+        };
+      }
+      return w;
+    });
+    const newConfig = { widgets: nextWidgets, layouts: {} };
+
+    // Atualizar estado local imediatamente
+    updateProject(project.id, { overviewConfig: newConfig });
+
+    // Salvar no backend
+    try {
+      await updateProjectBackend(project.id, { overviewConfig: newConfig });
+    } catch (error) {
+      console.error('Erro ao salvar tamanho do card no backend:', error);
+      // Reverter mudança local em caso de erro
+      updateProject(project.id, { overviewConfig: config });
+      alert('Erro ao salvar configuração. Tente novamente.');
+    }
+  };
+
   // Função para exportar dados para Excel
   const exportToExcel = () => {
     const exportData = [];
     
     // Adicionar informações básicas do projeto
-    exportData.push(['DADOS DO PROJETO', '']);
-    exportData.push(['Nome do Projeto', project.name || '']);
-    exportData.push(['ID do Projeto', project.id || '']);
-    exportData.push(['Data de Exportação', new Date().toLocaleDateString('pt-BR')]);
-    exportData.push(['']); // Linha em branco
+    exportData.push(['DADOS DO PROJETO', '', '']);
+    exportData.push(['Nome do Projeto', project.name || '', '']);
+    exportData.push(['ID do Projeto', project.id || '', '']);
+    exportData.push(['Data de Exportação', new Date().toLocaleDateString('pt-BR'), '']);
+    exportData.push(['', '', '']); // Linha em branco
     
     // Coletar dados de todos os widgets visíveis
-    exportData.push(['DADOS DA VISÃO GERAL', '']);
+    exportData.push(['DADOS DA VISÃO GERAL', '', '']);
+    exportData.push(['Campo', 'Valor', 'Tamanho']); // Cabeçalho
     
     widgets.forEach(widget => {
       const cardInfo = CARD_CATALOG.find(c => c.type === widget.type);
       const label = cardInfo?.label || widget.type;
+      const size = widget.size === 'large' ? '2 colunas' : '1 coluna';
       
       switch (widget.type) {
         case 'name':
-          exportData.push(['Nome do Projeto', project.name || '']);
+          exportData.push(['Nome do Projeto', project.name || '', size]);
           break;
         case 'client':
-          exportData.push(['Cliente Final', project.client || '']);
+          exportData.push(['Cliente Final', project.client || '', size]);
           break;
         case 'sector':
-          exportData.push(['Setor de Atuação', project.sector || '']);
+          exportData.push(['Setor de Atuação', project.sector || '', size]);
           break;
         case 'exxataActivities':
           const activities = Array.isArray(project.exxataActivities) 
             ? project.exxataActivities.join(', ') 
             : '';
-          exportData.push(['Atuação Exxata', activities]);
+          exportData.push(['Atuação Exxata', activities, size]);
           break;
         case 'location':
-          exportData.push(['Localização', project.location || '']);
+          exportData.push(['Localização', project.location || '', size]);
           break;
         case 'period':
           const period = `${project.startDate || ''} — ${project.endDate || ''}`;
-          exportData.push(['Período de Vigência', period]);
-          exportData.push(['Data de Início', project.startDate || '']);
-          exportData.push(['Data de Fim', project.endDate || '']);
+          exportData.push(['Período de Vigência', period, size]);
+          exportData.push(['Data de Início', project.startDate || '', size]);
+          exportData.push(['Data de Fim', project.endDate || '', size]);
           break;
         case 'executionPeriod':
           const execPeriod = `${project.executionStartDate || ''} — ${project.executionEndDate || ''}`;
-          exportData.push(['Período de Execução', execPeriod]);
-          exportData.push(['Data de Início da Execução', project.executionStartDate || '']);
-          exportData.push(['Data de Fim da Execução', project.executionEndDate || '']);
+          exportData.push(['Período de Execução', execPeriod, size]);
+          exportData.push(['Data de Início da Execução', project.executionStartDate || '', size]);
+          exportData.push(['Data de Fim da Execução', project.executionEndDate || '', size]);
           break;
         case 'contractSignatureDate':
-          exportData.push(['Data de Assinatura do Contrato', project.contractSignatureDate || '']);
+          exportData.push(['Data de Assinatura do Contrato', project.contractSignatureDate || '', size]);
           break;
         case 'osSignatureDate':
-          exportData.push(['Data de Assinatura da OS', project.osSignatureDate || '']);
+          exportData.push(['Data de Assinatura da OS', project.osSignatureDate || '', size]);
           break;
         case 'reportCutoffDate':
-          exportData.push(['Data de Corte do Relatório', project.reportCutoffDate || '']);
+          exportData.push(['Data de Corte do Relatório', project.reportCutoffDate || '', size]);
           break;
         case 'description':
-          exportData.push(['Descrição do Projeto', project.description || '']);
+          exportData.push(['Descrição do Projeto', project.description || '', size]);
           break;
         case 'team':
           const teamMembers = Array.isArray(project.team) 
             ? project.team.map(u => u.name).join(', ') 
             : '';
-          exportData.push(['Equipe do Projeto', teamMembers]);
+          exportData.push(['Equipe do Projeto', teamMembers, size]);
           break;
         case 'contractValue':
-          exportData.push(['Valor do Contrato', project.contractValue || '']);
+          exportData.push(['Valor do Contrato', project.contractValue || '', size]);
           break;
         case 'measuredValue':
           const measuredValue = project.measuredValue 
             ? `R$ ${Number(project.measuredValue).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             : '';
-          exportData.push(['Valor Medido (R$)', measuredValue]);
+          exportData.push(['Valor Medido (R$)', measuredValue, size]);
           break;
         case 'hourlyRate':
           const hourlyRate = project.hourlyRate 
             ? `US$ ${Number(project.hourlyRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             : '';
-          exportData.push(['Valor do Homem-Hora', hourlyRate]);
+          exportData.push(['Valor do Homem-Hora', hourlyRate, size]);
           break;
         case 'disputedAmount':
           const disputedAmount = project.disputedAmount 
             ? `R$ ${Number(project.disputedAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
             : '';
-          exportData.push(['Valor em Discussão', disputedAmount]);
+          exportData.push(['Valor em Discussão', disputedAmount, size]);
           break;
         case 'contractSummary':
-          exportData.push(['Título do Contrato', project.contractSummary || '']);
+          exportData.push(['Título do Contrato', project.contractSummary || '', size]);
           break;
         case 'progress':
-          exportData.push(['Progresso de Prazo (%)', `${Number(project.progress || 0)}%`]);
+          exportData.push(['Progresso de Prazo (%)', `${Number(project.progress || 0)}%`, size]);
           break;
         case 'physicalProgressReal':
-          exportData.push(['Progresso de Avanço Físico Real (%)', `${Number(project.physicalProgressReal || 0)}%`]);
+          exportData.push(['Progresso de Avanço Físico Real (%)', `${Number(project.physicalProgressReal || 0)}%`, size]);
           break;
         case 'physicalProgressContract':
-          exportData.push(['Progresso de Avanço Físico Contratado (%)', `${Number(project.physicalProgressContract || 0)}%`]);
+          exportData.push(['Progresso de Avanço Físico Contratado (%)', `${Number(project.physicalProgressContract || 0)}%`, size]);
           break;
         case 'billingProgress':
-          exportData.push(['Progresso em Faturamento Real (%)', `${Number(project.billingProgress || 0)}%`]);
+          exportData.push(['Progresso em Faturamento Real (%)', `${Number(project.billingProgress || 0)}%`, size]);
           break;
         case 'billingProgressContract':
-          exportData.push(['Progresso em Faturamento Contratado (%)', `${Number(project.billingProgressContract || 0)}%`]);
+          exportData.push(['Progresso em Faturamento Contratado (%)', `${Number(project.billingProgressContract || 0)}%`, size]);
           break;
         default:
-          exportData.push([label, 'Dados não disponíveis']);
+          exportData.push([label, 'Dados não disponíveis', size]);
       }
     });
 
@@ -359,7 +388,8 @@ export default function OverviewGridSimple({ project, user, canEdit, viewAsClien
     // Definir larguras das colunas
     ws['!cols'] = [
       { wch: 25 }, // Coluna A - Labels
-      { wch: 50 }  // Coluna B - Valores
+      { wch: 50 }, // Coluna B - Valores
+      { wch: 12 }  // Coluna C - Tamanho
     ];
     
     // Adicionar worksheet ao workbook
@@ -390,6 +420,7 @@ export default function OverviewGridSimple({ project, user, canEdit, viewAsClien
       // Processar dados importados
       const updates = {};
       const newWidgetsOrder = []; // Para preservar a ordem dos cards
+      const widgetSizes = {}; // Para armazenar tamanhos dos cards
       
       // Função auxiliar para processar percentuais
       const parsePercentage = (value) => {
@@ -454,6 +485,7 @@ export default function OverviewGridSimple({ project, user, canEdit, viewAsClien
         
         const label = String(row[0] || '').trim();
         const value = row[1];
+        const sizeValue = row[2]; // Terceira coluna: Tamanho
         
         console.log(`  📋 ${label}: ${value} (tipo: ${typeof value})`);
         
@@ -461,6 +493,12 @@ export default function OverviewGridSimple({ project, user, canEdit, viewAsClien
         const cardType = labelToCardType[label];
         if (cardType) {
           newWidgetsOrder.push(cardType);
+          
+          // Processar tamanho do card
+          if (sizeValue) {
+            const sizeStr = String(sizeValue).toLowerCase();
+            widgetSizes[cardType] = sizeStr.includes('2') ? 'large' : 'normal';
+          }
         }
         
         // Mapear labels para campos do projeto
@@ -514,12 +552,17 @@ export default function OverviewGridSimple({ project, user, canEdit, viewAsClien
           // Tentar encontrar widget existente para manter o ID
           const existing = widgets.find(w => w.type === type);
           if (existing) {
-            return existing;
+            // Atualizar tamanho se foi especificado no Excel
+            return {
+              ...existing,
+              size: widgetSizes[type] || existing.size || 'normal'
+            };
           }
           // Criar novo widget se não existir
           return {
             id: 'w_' + Math.floor(Date.now() + Math.random()*1000) + '_' + type,
-            type: type
+            type: type,
+            size: widgetSizes[type] || 'normal'
           };
         });
 
@@ -641,10 +684,13 @@ export default function OverviewGridSimple({ project, user, canEdit, viewAsClien
             onDragOver={(e) => handleDragOver(widget.id, e)}
             onDrop={(e) => handleDrop(widget.id, e)}
             onDragEnd={handleDragEnd}
-            className={`${dragOverId === widget.id ? 'ring-2 ring-exxata-red/40 rounded-lg' : ''}`}
+            className={`
+              ${widget.size === 'large' ? 'md:col-span-2' : 'md:col-span-1'}
+              ${dragOverId === widget.id ? 'ring-2 ring-exxata-red/40 rounded-lg' : ''}
+            `}
             title={isEditing ? 'Arraste para reordenar' : undefined}
           >
-            {renderWidgetCard(widget, isEditing, removeWidget, updateProjectBackend, project, canEdit, teamMembers)}
+            {renderWidgetCard(widget, isEditing, removeWidget, toggleWidgetSize, updateProjectBackend, project, canEdit, teamMembers)}
           </div>
         ))}
       </div>
@@ -656,15 +702,27 @@ export default function OverviewGridSimple({ project, user, canEdit, viewAsClien
 }
 
 // Função para renderizar cada tipo de card
-function renderWidgetCard(widget, isEditing, removeWidget, updateProjectBackend, project, canEdit, teamMembers) {
+function renderWidgetCard(widget, isEditing, removeWidget, toggleWidgetSize, updateProjectBackend, project, canEdit, teamMembers) {
   const type = widget.type;
   
   const headerActions = isEditing ? (
     <div className="flex items-center gap-2 select-none">
+      <button
+        type="button"
+        className="text-slate-400 hover:text-slate-600 transition-colors"
+        onClick={() => toggleWidgetSize(widget.id)}
+        title={widget.size === 'large' ? 'Reduzir para 1 coluna' : 'Expandir para 2 colunas'}
+      >
+        {widget.size === 'large' ? (
+          <Minimize2 className="h-4 w-4" />
+        ) : (
+          <Maximize2 className="h-4 w-4" />
+        )}
+      </button>
       <GripVertical className="h-4 w-4 text-slate-400 cursor-move" title="Arraste para reordenar" />
       <button
         type="button"
-        className="text-slate-400 hover:text-slate-600"
+        className="text-slate-400 hover:text-slate-600 transition-colors"
         onClick={() => removeWidget(widget.id)}
         title="Remover"
       >

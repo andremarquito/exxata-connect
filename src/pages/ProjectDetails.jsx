@@ -12,7 +12,7 @@ import {
   BarChart3, Clock, CheckCircle, AlertCircle, TrendingUp, Brain, 
   Download, Upload, Search, Zap, Target, Shield, ArrowLeft, Settings, UserPlus, FilePlus2,
   Image, File, Table, Trash2, PieChart, LineChart, Plus, Edit3, Palette, X, GripVertical, Copy, Camera,
-  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown, Eye
+  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown, Eye, Maximize2, Minimize2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjects } from '@/contexts/ProjectsContext';
@@ -20,6 +20,7 @@ import { useUsers } from '@/contexts/UsersContext';
 import { useState, useEffect, useRef } from 'react';
 import OverviewGrid from '@/components/projects/OverviewGridSimple';
 import IndicatorsTab from '@/components/projects/IndicatorsTab';
+import IndicatorTemplateSelector from '@/components/projects/IndicatorTemplateSelector';
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -38,6 +39,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
           ? [String(ds.values)]
           : (ds.values || '').split(',').map(v => v.trim())),
       colors: Array.isArray(ds.colors) ? ds.colors : [],
+      chartType: ds.chartType || undefined, // Preservar chartType para gráficos combo
     }));
   };
 
@@ -49,6 +51,14 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
   const [datasets, setDatasets] = useState(() => formatDatasetsForForm(indicator?.datasets));
   const importInputRef = useRef(null);
   const [showDataLabels, setShowDataLabels] = useState(indicator?.options?.showDataLabels ?? true);
+  
+  // Estados para configuração de eixos Y (gráficos combo)
+  const [leftAxisMin, setLeftAxisMin] = useState(indicator?.options?.leftAxis?.min ?? '');
+  const [leftAxisMax, setLeftAxisMax] = useState(indicator?.options?.leftAxis?.max ?? '');
+  const [leftAxisTitle, setLeftAxisTitle] = useState(indicator?.options?.leftAxis?.title ?? '');
+  const [rightAxisMin, setRightAxisMin] = useState(indicator?.options?.rightAxis?.min ?? '');
+  const [rightAxisMax, setRightAxisMax] = useState(indicator?.options?.rightAxis?.max ?? '');
+  const [rightAxisTitle, setRightAxisTitle] = useState(indicator?.options?.rightAxis?.title ?? '');
 
   useEffect(() => {
     setTitle(indicator?.title || '');
@@ -57,6 +67,12 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
     setValueFormat(indicator?.options?.valueFormat || 'number');
     setObservations(indicator?.observations || '');
     setShowDataLabels(indicator?.options?.showDataLabels ?? true);
+    setLeftAxisMin(indicator?.options?.leftAxis?.min ?? '');
+    setLeftAxisMax(indicator?.options?.leftAxis?.max ?? '');
+    setLeftAxisTitle(indicator?.options?.leftAxis?.title ?? '');
+    setRightAxisMin(indicator?.options?.rightAxis?.min ?? '');
+    setRightAxisMax(indicator?.options?.rightAxis?.max ?? '');
+    setRightAxisTitle(indicator?.options?.rightAxis?.title ?? '');
     
     let formattedDatasets = formatDatasetsForForm(indicator?.datasets);
     
@@ -178,21 +194,39 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
     });
   };
 
-  const buildFormData = () => ({
-    title: title.trim(),
-    chart_type: chartType,
-    labels: labels.split(',').map(l => l.trim()).filter(Boolean),
-    datasets: datasets.map(ds => ({
-      ...ds,
-      values: typeof ds.values === 'string' ? ds.values.split(',').map(v => parseFloat(v.trim()) || 0) : Array.isArray(ds.values) ? ds.values : []
-    })),
-    options: {
+  const buildFormData = () => {
+    const options = {
       ...indicator?.options,
       valueFormat,
       showDataLabels
-    },
-    observations: observations.trim(),
-  });
+    };
+    
+    // Adicionar configurações de eixos Y para gráficos combo
+    if (chartType === 'combo') {
+      options.leftAxis = {
+        min: leftAxisMin !== '' ? Number(leftAxisMin) : undefined,
+        max: leftAxisMax !== '' ? Number(leftAxisMax) : undefined,
+        title: leftAxisTitle || undefined
+      };
+      options.rightAxis = {
+        min: rightAxisMin !== '' ? Number(rightAxisMin) : undefined,
+        max: rightAxisMax !== '' ? Number(rightAxisMax) : undefined,
+        title: rightAxisTitle || undefined
+      };
+    }
+    
+    return {
+      title: title.trim(),
+      chart_type: chartType,
+      labels: labels.split(',').map(l => l.trim()).filter(Boolean),
+      datasets: datasets.map(ds => ({
+        ...ds,
+        values: typeof ds.values === 'string' ? ds.values.split(',').map(v => parseFloat(v.trim()) || 0) : Array.isArray(ds.values) ? ds.values : []
+      })),
+      options,
+      observations: observations.trim(),
+    };
+  };
 
   const addDataset = () => {
     setDatasets([...datasets, { name: '', values: '', color: '#82ca9d' }]);
@@ -240,72 +274,249 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
   };
 
   const handleImportChange = async (event) => {
+    console.log('📥 [FORMULÁRIO] Iniciando importação...');
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      console.log('❌ [FORMULÁRIO] Nenhum arquivo selecionado');
+      return;
+    }
+
+    console.log('📁 [FORMULÁRIO] Arquivo:', file.name);
 
     try {
       const data = await file.arrayBuffer();
       const wb = XLSX.read(data);
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws);
-      if (!rows.length) {
-        alert('Arquivo vazio ou inválido.');
-        return;
-      }
+      
+      console.log('📋 [FORMULÁRIO] Abas encontradas:', wb.SheetNames);
 
-      const row = rows[0];
-      const importedTitle = row['Título'] || row['title'] || '';
-      const importedChart = row['Tipo de Gráfico'] || row['chart_type'] || chartType;
-      const formatStr = (row['Formato de Valor'] || row['value_format'] || '').toLowerCase();
-      const importedValueFormat = formatStr.includes('usd') || formatStr.includes('dólar') || formatStr.includes('dolar') ? 'currency-usd' : formatStr.includes('monetário') || formatStr.includes('monetario') || formatStr.includes('brl') ? 'currency' : formatStr.includes('percentual') ? 'percentage' : 'number';
-      const importedLabels = row['Rótulos'] || row['labels'] || '';
-      const importedDatasetStr = row['Conjunto de Dados'] || row['datasets'] || '';
-      const importedColors = row['Cores'] || row['colors'] || '';
+      // Verificar se tem as 3 abas necessárias (formato novo)
+      const hasConfigSheet = wb.SheetNames.includes('Configurações') || wb.SheetNames.includes('Configuracoes');
+      const hasDataSheet = wb.SheetNames.includes('Dados');
+      const hasColorSheet = wb.SheetNames.includes('Cores');
 
-      if (!importedTitle) {
-        alert('Título não encontrado no arquivo.');
-        return;
-      }
+      console.log('✅ [FORMULÁRIO] Formato 3 abas?', hasConfigSheet && hasDataSheet);
 
-      const parsedLabels = importedLabels
-        ? importedLabels.split(',').map(l => l.trim()).filter(Boolean)
-        : [];
+      if (hasConfigSheet && hasDataSheet) {
+        // ===== FORMATO NOVO (3 ABAS) =====
+        console.log('✨ [FORMULÁRIO] Processando formato de 3 abas...');
 
-      const colorParts = importedColors ? importedColors.split(',').map(c => c.trim()) : [];
-      let parsedDatasets = [];
-      if (importedDatasetStr) {
-        parsedDatasets = importedDatasetStr.split(' | ').map((part, index) => {
-          const [name, valuesStr] = part.split(':');
-          const valuesArray = valuesStr
-            ? valuesStr.split(',').map(v => parseFloat(v.trim()) || 0)
-            : [];
+        // Ler aba de Configurações
+        const configSheetName = wb.SheetNames.find(name => name === 'Configurações' || name === 'Configuracoes');
+        const configData = XLSX.utils.sheet_to_json(wb.Sheets[configSheetName]);
+        
+        if (configData.length === 0) {
+          alert('A aba "Configurações" está vazia.');
+          return;
+        }
+
+        // Pegar primeiro gráfico
+        const config = configData[0];
+        console.log('📋 [FORMULÁRIO] Configuração:', config);
+
+        const importedTitle = config['Título'] || config['Titulo'] || config['title'] || '';
+        
+        // Normalizar tipo de gráfico
+        let importedChart = String(config['Tipo'] || config['tipo'] || config['type'] || 'bar').toLowerCase().trim();
+        // Mapear possíveis variações
+        if (importedChart === 'barra') importedChart = 'bar';
+        if (importedChart === 'linha') importedChart = 'line';
+        if (importedChart === 'pizza') importedChart = 'pie';
+        if (importedChart === 'rosca') importedChart = 'doughnut';
+        console.log('📊 [FORMULÁRIO] Tipo de gráfico normalizado:', importedChart);
+        
+        // Normalizar formato de valor
+        const formatoExcel = String(config['Formato'] || config['formato'] || config['format'] || 'Numérico').toLowerCase();
+        console.log('💰 [FORMULÁRIO] Formato bruto:', formatoExcel);
+        
+        let importedValueFormat = 'number'; // default
+        if (formatoExcel.includes('monetário') || formatoExcel.includes('monetario') || formatoExcel.includes('brl') || formatoExcel.includes('r$')) {
+          importedValueFormat = 'currency';
+        } else if (formatoExcel.includes('usd') || formatoExcel.includes('dólar') || formatoExcel.includes('dolar') || formatoExcel.includes('$')) {
+          importedValueFormat = 'currency-usd';
+        } else if (formatoExcel.includes('percent') || formatoExcel.includes('%') || formatoExcel === 'percentage') {
+          importedValueFormat = 'percentage';
+        } else if (formatoExcel.includes('numérico') || formatoExcel.includes('numerico') || formatoExcel === 'number') {
+          importedValueFormat = 'number';
+        }
+        console.log('💰 [FORMULÁRIO] Formato normalizado:', importedValueFormat);
+
+        // Ler aba de Dados
+        const dataSheet = wb.Sheets['Dados'];
+        
+        // Extrair labels do cabeçalho preservando formatação original
+        const range = XLSX.utils.decode_range(dataSheet['!ref']);
+        const parsedLabels = [];
+        
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+          const cell = dataSheet[cellAddress];
           
-          if (importedChart === 'pie') {
-            // Para pizza, as cores estão no array colorParts diretamente
-            return {
-              name: name?.trim() || `Série ${index + 1}`,
-              values: valuesArray.join(', '),
-              colors: colorParts.length > 0 ? colorParts : undefined,
-            };
-          } else {
-            // Para outros gráficos, cores por dataset
-            return {
-              name: name?.trim() || `Série ${index + 1}`,
-              values: valuesArray.join(', '),
-              color: colorParts[index] || '#8884d8',
-            };
+          if (cell && cell.v !== undefined) {
+            const headerValue = String(cell.v);
+            // Pular colunas de ID e Dataset
+            if (headerValue !== 'ID_Gráfico' && headerValue !== 'ID_Grafico' && 
+                headerValue !== 'id' && headerValue !== 'Dataset' && headerValue !== 'dataset') {
+              // Se a célula tem formato de texto (w), usar ele; senão usar o valor (v)
+              parsedLabels.push(cell.w || headerValue);
+            }
           }
+        }
+        
+        console.log('🏷️ [FORMULÁRIO] Labels extraídos do cabeçalho:', parsedLabels);
+        
+        // Agora ler os dados usando defval para manter valores originais
+        const dataData = XLSX.utils.sheet_to_json(dataSheet, { 
+          raw: false,  // Usar valores formatados
+          defval: ''   // Valor padrão para células vazias
         });
+        
+        console.log('📊 [FORMULÁRIO] Dados:', dataData);
+
+        if (dataData.length === 0) {
+          alert('A aba "Dados" está vazia.');
+          return;
+        }
+
+        // Processar datasets
+        const parsedDatasets = dataData.map(row => {
+          const datasetName = row['Dataset'] || row['dataset'] || 'Série 1';
+          const values = parsedLabels.map(label => {
+            const val = row[label];
+            return val !== undefined && val !== null && val !== '' ? parseFloat(val) : 0;
+          });
+
+          return {
+            name: datasetName,
+            values: values.join(', '),
+            color: '#8884d8'
+          };
+        });
+
+        console.log('📈 [FORMULÁRIO] Datasets:', parsedDatasets);
+
+        // Ler aba de Cores (opcional)
+        if (hasColorSheet) {
+          const colorData = XLSX.utils.sheet_to_json(wb.Sheets['Cores']);
+          console.log('🎨 [FORMULÁRIO] Cores:', colorData);
+
+          colorData.forEach(row => {
+            const datasetName = row['Dataset'] || row['dataset'];
+            const color = row['Cor'] || row['cor'] || row['color'];
+            const labelName = row['Rótulo'] || row['Rotulo'] || row['rotulo'] || row['label'];
+            const chartType = row['Tipo'] || row['tipo'] || row['type']; // Para gráficos combo
+
+            const dataset = parsedDatasets.find(ds => ds.name === datasetName);
+            if (dataset) {
+              // Aplicar cor
+              if (color) {
+                if (importedChart === 'pie' || importedChart === 'doughnut') {
+                  // Para pizza/rosca: cores por fatia
+                  if (!dataset.colors) {
+                    dataset.colors = Array(parsedLabels.length).fill('#8884d8');
+                  }
+                  if (labelName) {
+                    const idx = parsedLabels.findIndex(l => String(l).trim() === String(labelName).trim());
+                    if (idx >= 0) {
+                      dataset.colors[idx] = color;
+                      console.log(`🎨 [FORMULÁRIO] Cor "${color}" aplicada à fatia "${labelName}"`);
+                    }
+                  }
+                } else {
+                  // Outros tipos: cor por dataset
+                  dataset.color = color;
+                  console.log(`🎨 [FORMULÁRIO] Cor "${color}" aplicada ao dataset "${datasetName}"`);
+                }
+              }
+              
+              // Para gráficos combo: definir tipo de renderização (bar/line)
+              if (importedChart === 'combo' && chartType) {
+                const normalizedType = chartType.toLowerCase().trim();
+                dataset.chartType = normalizedType === 'line' || normalizedType === 'linha' ? 'line' : 'bar';
+                console.log(`📊 [FORMULÁRIO] Tipo "${dataset.chartType}" aplicado ao dataset "${datasetName}"`);
+              }
+            }
+          });
+        }
+
+        // Aplicar ao formulário
+        setTitle(importedTitle);
+        setChartType(importedChart);
+        setValueFormat(importedValueFormat);
+        setLabels(parsedLabels.join(', '));
+        setDatasets(formatDatasetsForForm(parsedDatasets));
+
+        console.log('✅ [FORMULÁRIO] Importação concluída com sucesso!');
+        alert('Indicador importado com sucesso!');
+
+      } else {
+        // ===== FORMATO ANTIGO (1 ABA) =====
+        console.log('📜 [FORMULÁRIO] Processando formato legado (1 aba)...');
+        
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws);
+        
+        if (!rows.length) {
+          alert('Arquivo vazio ou inválido.');
+          return;
+        }
+
+        const row = rows[0];
+        const importedTitle = row['Título'] || row['title'] || '';
+        const importedChart = row['Tipo de Gráfico'] || row['chart_type'] || chartType;
+        const formatStr = (row['Formato de Valor'] || row['value_format'] || '').toLowerCase();
+        const importedValueFormat = formatStr.includes('usd') || formatStr.includes('dólar') || formatStr.includes('dolar') ? 'currency-usd' : formatStr.includes('monetário') || formatStr.includes('monetario') || formatStr.includes('brl') ? 'currency' : formatStr.includes('percentual') ? 'percentage' : 'number';
+        const importedLabels = row['Rótulos'] || row['labels'] || '';
+        const importedDatasetStr = row['Conjunto de Dados'] || row['datasets'] || '';
+        const importedColors = row['Cores'] || row['colors'] || '';
+
+        if (!importedTitle) {
+          alert('Título não encontrado no arquivo.');
+          return;
+        }
+
+        const parsedLabels = importedLabels
+          ? importedLabels.split(',').map(l => l.trim()).filter(Boolean)
+          : [];
+
+        const colorParts = importedColors ? importedColors.split(',').map(c => c.trim()) : [];
+        let parsedDatasets = [];
+        if (importedDatasetStr) {
+          parsedDatasets = importedDatasetStr.split(' | ').map((part, index) => {
+            const [name, valuesStr] = part.split(':');
+            const valuesArray = valuesStr
+              ? valuesStr.split(',').map(v => parseFloat(v.trim()) || 0)
+              : [];
+            
+            if (importedChart === 'pie' || importedChart === 'doughnut') {
+              return {
+                name: name?.trim() || `Série ${index + 1}`,
+                values: valuesArray.join(', '),
+                colors: colorParts.length > 0 ? colorParts : undefined,
+              };
+            } else {
+              return {
+                name: name?.trim() || `Série ${index + 1}`,
+                values: valuesArray.join(', '),
+                color: colorParts[index] || '#8884d8',
+              };
+            }
+          });
+        }
+
+        setTitle(importedTitle);
+        setChartType(importedChart);
+        setValueFormat(importedValueFormat);
+        setLabels(parsedLabels.join(', '));
+        setDatasets(formatDatasetsForForm(parsedDatasets));
+
+        console.log('✅ [FORMULÁRIO] Importação legada concluída!');
+        alert('Indicador importado com sucesso!');
       }
 
-      setTitle(importedTitle);
-      setChartType(importedChart);
-      setValueFormat(importedValueFormat);
-      setLabels(parsedLabels.join(', '));
-      setDatasets(formatDatasetsForForm(parsedDatasets));
     } catch (error) {
-      console.error('Erro ao importar indicador:', error);
-      alert('Erro ao importar arquivo. Verifique se é um Excel válido.');
+      console.error('❌ [FORMULÁRIO] Erro ao importar:', error);
+      console.error('Stack trace:', error.stack);
+      alert('Erro ao importar arquivo. Verifique se é um Excel válido.\n\nDetalhes: ' + error.message);
     } finally {
       event.target.value = null;
     }
@@ -350,6 +561,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
           <option value="line">Linha</option>
           <option value="pie">Pizza</option>
           <option value="doughnut">Rosca</option>
+          <option value="combo">Combo (Barra + Linha)</option>
         </select>
       </div>
       <div>
@@ -430,21 +642,55 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
                     <th className="p-2 border w-48 text-left">Rótulo</th>
                     {datasets.map((ds, index) => (
                       <th key={index} className="p-2 border text-left">
-                        <div className="flex items-center gap-2">
-                          <input
-                            value={ds.name}
-                            onChange={(e) => handleDatasetChange(index, 'name', e.target.value)}
-                            placeholder={`Série ${index + 1}`}
-                            className="p-1 border rounded w-full"
-                          />
-                          <input
-                            type="color"
-                            value={ds.color || '#8884d8'}
-                            onChange={(e) => handleDatasetChange(index, 'color', e.target.value)}
-                            className="h-8 w-10 border rounded"
-                          />
-                          {datasets.length > 1 && (
-                            <button onClick={() => removeDataset(index)} className="text-red-500 hover:text-red-700 text-xs">Remover</button>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              value={ds.name}
+                              onChange={(e) => handleDatasetChange(index, 'name', e.target.value)}
+                              placeholder={`Série ${index + 1}`}
+                              className="p-1 border rounded w-full"
+                            />
+                            <input
+                              type="color"
+                              value={ds.color || '#8884d8'}
+                              onChange={(e) => handleDatasetChange(index, 'color', e.target.value)}
+                              className="h-8 w-10 border rounded"
+                            />
+                            {datasets.length > 1 && (
+                              <button onClick={() => removeDataset(index)} className="text-red-500 hover:text-red-700 text-xs">Remover</button>
+                            )}
+                          </div>
+                          {chartType === 'combo' && (
+                            <>
+                              <select
+                                value={ds.chartType || 'bar'}
+                                onChange={(e) => handleDatasetChange(index, 'chartType', e.target.value)}
+                                className="p-1 border rounded text-xs"
+                              >
+                                <option value="bar">Barra</option>
+                                <option value="line">Linha</option>
+                              </select>
+                              <select
+                                value={ds.yAxisId || 'left'}
+                                onChange={(e) => handleDatasetChange(index, 'yAxisId', e.target.value)}
+                                className="p-1 border rounded text-xs"
+                                title="Eixo Y"
+                              >
+                                <option value="left">Eixo Esquerdo</option>
+                                <option value="right">Eixo Direito</option>
+                              </select>
+                              <select
+                                value={ds.valueFormat || valueFormat}
+                                onChange={(e) => handleDatasetChange(index, 'valueFormat', e.target.value)}
+                                className="p-1 border rounded text-xs"
+                                title="Formato de Valor"
+                              >
+                                <option value="number">Numérico</option>
+                                <option value="currency">Monetário BRL</option>
+                                <option value="currency-usd">Monetário USD</option>
+                                <option value="percentage">Percentual</option>
+                              </select>
+                            </>
                           )}
                         </div>
                       </th>
@@ -498,6 +744,95 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
         )}
       </div>
 
+      {/* Configuração de Limites dos Eixos Y (apenas para gráficos combo) */}
+      {chartType === 'combo' && (
+        <div className="space-y-3 p-4 border rounded bg-slate-50">
+          <h3 className="font-medium text-sm">Configuração dos Eixos Y</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Eixo Esquerdo */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-slate-700">Eixo Esquerdo</h4>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Título do Eixo</label>
+                <input
+                  type="text"
+                  value={leftAxisTitle}
+                  onChange={(e) => setLeftAxisTitle(e.target.value)}
+                  placeholder="Ex: Faturamento (R$)"
+                  className="w-full p-2 border rounded text-sm mb-2"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Mínimo</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={leftAxisMin}
+                    onChange={(e) => setLeftAxisMin(e.target.value)}
+                    placeholder="Auto"
+                    className="w-full p-2 border rounded text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Máximo</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={leftAxisMax}
+                    onChange={(e) => setLeftAxisMax(e.target.value)}
+                    placeholder="Auto"
+                    className="w-full p-2 border rounded text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+            
+            {/* Eixo Direito */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-slate-700">Eixo Direito</h4>
+              <div>
+                <label className="block text-xs text-slate-600 mb-1">Título do Eixo</label>
+                <input
+                  type="text"
+                  value={rightAxisTitle}
+                  onChange={(e) => setRightAxisTitle(e.target.value)}
+                  placeholder="Ex: Quantidade (un)"
+                  className="w-full p-2 border rounded text-sm mb-2"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Mínimo</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={rightAxisMin}
+                    onChange={(e) => setRightAxisMin(e.target.value)}
+                    placeholder="Auto"
+                    className="w-full p-2 border rounded text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">Máximo</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={rightAxisMax}
+                    onChange={(e) => setRightAxisMax(e.target.value)}
+                    placeholder="Auto"
+                    className="w-full p-2 border rounded text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 italic">
+            💡 Deixe em branco para ajuste automático. Use limites personalizados quando as séries tiverem escalas muito diferentes.
+          </p>
+        </div>
+      )}
+
       <div className="flex justify-end gap-2 pt-4">
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button onClick={handleSave}>Salvar</Button>
@@ -524,9 +859,15 @@ export function ProjectDetails() {
   const [showIndicatorModal, setShowIndicatorModal] = useState(false);
   const [editingIndicator, setEditingIndicator] = useState(null);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const indicatorsContainerRef = useRef(null);
   const conductsImportInputRef = useRef(null);
   const panoramaImportInputRef = useRef(null);
+  
+  // Estados para drag & drop e edição de indicadores
+  const [isEditingIndicators, setIsEditingIndicators] = useState(false);
+  const [draggingIndicatorId, setDraggingIndicatorId] = useState(null);
+  const [dragOverIndicatorId, setDragOverIndicatorId] = useState(null);
   
   // Estado para modo "Visualizar como Cliente"
   const [viewAsClient, setViewAsClient] = useState(false);
@@ -1430,6 +1771,78 @@ export function ProjectDetails() {
     loadData();
   }, [project?.id, user?.id]);
 
+  // Funções para drag & drop e gerenciamento de indicadores
+  const handleIndicatorDragStart = (indicatorId, e) => {
+    if (!isEditingIndicators) return;
+    setDraggingIndicatorId(indicatorId);
+    try { e.dataTransfer.setData('text/plain', String(indicatorId)); } catch {}
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleIndicatorDragOver = (indicatorId, e) => {
+    if (!isEditingIndicators) return;
+    e.preventDefault();
+    setDragOverIndicatorId(indicatorId);
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleIndicatorDrop = async (targetId, e) => {
+    if (!isEditingIndicators) return;
+    e.preventDefault();
+    const sourceId = draggingIndicatorId ?? e.dataTransfer.getData('text/plain');
+    setDraggingIndicatorId(null);
+    setDragOverIndicatorId(null);
+    
+    if (!sourceId || sourceId === targetId) return;
+    
+    const indicators = Array.isArray(project?.project_indicators) ? [...project.project_indicators] : [];
+    const fromIndex = indicators.findIndex(ind => ind.id === sourceId);
+    const toIndex = indicators.findIndex(ind => ind.id === targetId);
+    
+    if (fromIndex === -1 || toIndex === -1) return;
+    
+    const [moved] = indicators.splice(fromIndex, 1);
+    const insertIndex = fromIndex < toIndex ? toIndex : toIndex;
+    indicators.splice(insertIndex, 0, moved);
+    
+    // Atualizar estado local imediatamente para feedback visual
+    updateProject(project.id, { project_indicators: indicators });
+    
+    // Atualizar ordem no backend em segundo plano
+    try {
+      // Atualizar cada indicador com sua nova ordem (enviar apenas o campo order)
+      for (let i = 0; i < indicators.length; i++) {
+        await updateProjectIndicator(project.id, indicators[i].id, { order: i });
+      }
+    } catch (error) {
+      console.error('Erro ao reordenar indicadores:', error);
+      // Reverter mudança local em caso de erro
+      updateProject(project.id, { project_indicators: project.project_indicators });
+      alert('Erro ao salvar reordenação. Tente novamente.');
+    }
+  };
+
+  const handleIndicatorDragEnd = () => {
+    setDraggingIndicatorId(null);
+    setDragOverIndicatorId(null);
+  };
+
+  const toggleIndicatorSize = async (indicatorId) => {
+    const indicator = project?.project_indicators?.find(ind => ind.id === indicatorId);
+    if (!indicator) return;
+    
+    const newSize = indicator.size === 'large' ? 'normal' : 'large';
+    
+    try {
+      // Enviar apenas o campo size para evitar conflitos
+      await updateProjectIndicator(project.id, indicatorId, { size: newSize });
+      // O contexto já atualiza automaticamente, não precisa de refreshProjects
+    } catch (error) {
+      console.error('Erro ao alterar tamanho do indicador:', error);
+      alert('Erro ao salvar configuração. Tente novamente.');
+    }
+  };
+
   // Funções para export/import de indicadores - MODELO DE 3 ABAS
   const handleExportIndicators = () => {
     try {
@@ -1447,7 +1860,9 @@ export function ProjectDetails() {
         'ID': `G${index + 1}`,
         'Título': indicator.title,
         'Tipo': indicator.chart_type || 'bar',
-        'Formato': indicator.options?.valueFormat || 'Numérico'
+        'Formato': indicator.options?.valueFormat || 'number',
+        'Tamanho': indicator.size === 'large' ? '2 colunas' : '1 coluna',
+        'Ordem': indicator.order !== undefined ? indicator.order : index
       }));
 
       const wsConfig = XLSX.utils.json_to_sheet(configData);
@@ -1455,7 +1870,9 @@ export function ProjectDetails() {
         { wch: 8 },  // ID
         { wch: 40 }, // Título
         { wch: 15 }, // Tipo
-        { wch: 15 }  // Formato
+        { wch: 15 }, // Formato
+        { wch: 12 }, // Tamanho
+        { wch: 8 }   // Ordem
       ];
       XLSX.utils.book_append_sheet(wb, wsConfig, 'Configurações');
 
@@ -1483,6 +1900,19 @@ export function ProjectDetails() {
       });
 
       const wsData = XLSX.utils.json_to_sheet(dataRows);
+      
+      // Formatar células numéricas com separador decimal brasileiro
+      const range = XLSX.utils.decode_range(wsData['!ref']);
+      for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+        for (let C = range.s.c + 2; C <= range.e.c; ++C) { // Começar da coluna 2 (após ID_Gráfico e Dataset)
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = wsData[cellAddress];
+          if (cell && typeof cell.v === 'number') {
+            cell.z = '#.##0,00'; // Formato brasileiro: vírgula para decimal, ponto para milhar
+          }
+        }
+      }
+      
       // Largura dinâmica baseada no número de colunas
       const dataColWidths = [
         { wch: 12 }, // ID_Gráfico
@@ -1512,11 +1942,21 @@ export function ProjectDetails() {
             });
           } else {
             // Demais tipos seguem com cor por dataset
-            colorRows.push({
+            const colorRow = {
               'ID_Gráfico': graphId,
               'Dataset': dataset.name || 'Série 1',
               'Cor': dataset.color || '#8884d8'
-            });
+            };
+            
+            // Para gráficos combo, adicionar colunas específicas
+            if (indicator.chart_type === 'combo') {
+              colorRow['Tipo'] = dataset.chartType || 'bar';
+              const yAxisId = dataset.yAxisId || 'left';
+              colorRow['Eixo Y'] = yAxisId === 'right' ? 'Direito' : 'Esquerdo';
+              colorRow['Formato'] = dataset.valueFormat || indicator.options?.valueFormat || 'number';
+            }
+            
+            colorRows.push(colorRow);
           }
         });
       });
@@ -1526,18 +1966,296 @@ export function ProjectDetails() {
         { wch: 12 }, // ID_Gráfico
         { wch: 20 }, // Dataset
         { wch: 20 }, // Rótulo (opcional para pizza/rosca)
-        { wch: 15 }  // Cor
+        { wch: 15 }, // Cor
+        { wch: 12 }, // Tipo (opcional para combo)
+        { wch: 12 }, // Eixo Y (opcional para combo)
+        { wch: 15 }  // Formato (opcional para combo)
       ];
       XLSX.utils.book_append_sheet(wb, wsColors, 'Cores');
+
+      // ===== ABA 4: EIXOS (apenas para gráficos combo) =====
+      const axisRows = [];
+      indicators.forEach((indicator, index) => {
+        if (indicator.chart_type === 'combo' && indicator.options) {
+          const graphId = `G${index + 1}`;
+          const leftAxis = indicator.options.leftAxis || {};
+          const rightAxis = indicator.options.rightAxis || {};
+          
+          axisRows.push({
+            'ID_Gráfico': graphId,
+            'Eixo': 'Esquerdo',
+            'Título': leftAxis.title || '',
+            'Mínimo': leftAxis.min !== undefined && leftAxis.min !== null ? leftAxis.min : '',
+            'Máximo': leftAxis.max !== undefined && leftAxis.max !== null ? leftAxis.max : ''
+          });
+          
+          axisRows.push({
+            'ID_Gráfico': graphId,
+            'Eixo': 'Direito',
+            'Título': rightAxis.title || '',
+            'Mínimo': rightAxis.min !== undefined && rightAxis.min !== null ? rightAxis.min : '',
+            'Máximo': rightAxis.max !== undefined && rightAxis.max !== null ? rightAxis.max : ''
+          });
+        }
+      });
+
+      if (axisRows.length > 0) {
+        const wsAxis = XLSX.utils.json_to_sheet(axisRows);
+        wsAxis['!cols'] = [
+          { wch: 12 }, // ID_Gráfico
+          { wch: 12 }, // Eixo
+          { wch: 25 }, // Título
+          { wch: 12 }, // Mínimo
+          { wch: 12 }  // Máximo
+        ];
+        XLSX.utils.book_append_sheet(wb, wsAxis, 'Eixos');
+      }
 
       // Download do arquivo
       const fileName = `indicadores_${project.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(wb, fileName);
       
-      alert(`${indicators.length} indicador(es) exportado(s) com sucesso em formato de 3 abas!`);
+      alert(`${indicators.length} indicador(es) exportado(s) com sucesso em formato de ${axisRows.length > 0 ? '4' : '3'} abas!`);
     } catch (error) {
       console.error('Erro ao exportar indicadores:', error);
       alert('Erro ao exportar indicadores. Tente novamente.');
+    }
+  };
+
+  // Exportar indicador individual no formato de 3 abas
+  const handleExportSingleIndicator = (indicator, indicatorIndex) => {
+    try {
+      if (!indicator) {
+        alert('Indicador inválido.');
+        return;
+      }
+
+      // Criar workbook
+      const wb = XLSX.utils.book_new();
+
+      // ===== ABA 1: CONFIGURAÇÕES =====
+      const configData = [{
+        'ID': 'G1',
+        'Título': indicator.title,
+        'Tipo': indicator.chart_type || 'bar',
+        'Formato': indicator.options?.valueFormat || 'number',
+        'Tamanho': indicator.size === 'large' ? '2 colunas' : '1 coluna',
+        'Ordem': indicator.order !== undefined ? indicator.order : indicatorIndex
+      }];
+
+      const wsConfig = XLSX.utils.json_to_sheet(configData);
+      wsConfig['!cols'] = [
+        { wch: 8 },  // ID
+        { wch: 40 }, // Título
+        { wch: 15 }, // Tipo
+        { wch: 15 }, // Formato
+        { wch: 12 }, // Tamanho
+        { wch: 8 }   // Ordem
+      ];
+      XLSX.utils.book_append_sheet(wb, wsConfig, 'Configurações');
+
+      // ===== ABA 2: DADOS =====
+      const dataRows = [];
+      const graphId = 'G1';
+      const labels = Array.isArray(indicator.labels) ? indicator.labels : [];
+      const datasets = Array.isArray(indicator.datasets) ? indicator.datasets : [];
+
+      datasets.forEach(dataset => {
+        const row = {
+          'ID_Gráfico': graphId,
+          'Dataset': dataset.name || 'Série 1'
+        };
+        
+        // Adicionar valores para cada rótulo
+        labels.forEach((label, labelIndex) => {
+          const value = dataset.values?.[labelIndex];
+          row[label] = value !== undefined && value !== null ? value : '';
+        });
+
+        dataRows.push(row);
+      });
+
+      const wsData = XLSX.utils.json_to_sheet(dataRows);
+      
+      // Formatar células numéricas com separador decimal brasileiro
+      const range = XLSX.utils.decode_range(wsData['!ref']);
+      for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+        for (let C = range.s.c + 2; C <= range.e.c; ++C) { // Começar da coluna 2 (após ID_Gráfico e Dataset)
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = wsData[cellAddress];
+          if (cell && typeof cell.v === 'number') {
+            cell.z = '#.##0,00'; // Formato brasileiro: vírgula para decimal, ponto para milhar
+          }
+        }
+      }
+      
+      // Largura dinâmica baseada no número de colunas
+      const dataColWidths = [
+        { wch: 12 }, // ID_Gráfico
+        { wch: 20 }, // Dataset
+        ...Array(labels.length).fill({ wch: 15 })
+      ];
+      wsData['!cols'] = dataColWidths;
+      XLSX.utils.book_append_sheet(wb, wsData, 'Dados');
+
+      // ===== ABA 3: CORES =====
+      const colorRows = [];
+
+      datasets.forEach(dataset => {
+        // Para pizza/rosca exportar cores por fatia (uma linha por rótulo)
+        if ((indicator.chart_type === 'pie' || indicator.chart_type === 'doughnut') && Array.isArray(labels)) {
+          const sliceColors = Array.isArray(dataset.colors) ? dataset.colors : [];
+          labels.forEach((label, i) => {
+            colorRows.push({
+              'ID_Gráfico': graphId,
+              'Dataset': dataset.name || 'Série 1',
+              'Rótulo': label,
+              'Cor': sliceColors[i] || '#8884d8'
+            });
+          });
+        } else {
+          // Demais tipos seguem com cor por dataset
+          const colorRow = {
+            'ID_Gráfico': graphId,
+            'Dataset': dataset.name || 'Série 1',
+            'Cor': dataset.color || '#8884d8'
+          };
+          
+          // Para gráficos combo, adicionar colunas específicas
+          if (indicator.chart_type === 'combo') {
+            colorRow['Tipo'] = dataset.chartType || 'bar';
+            const yAxisId = dataset.yAxisId || 'left';
+            colorRow['Eixo Y'] = yAxisId === 'right' ? 'Direito' : 'Esquerdo';
+            colorRow['Formato'] = dataset.valueFormat || indicator.options?.valueFormat || 'number';
+          }
+          
+          colorRows.push(colorRow);
+        }
+      });
+
+      const wsColors = XLSX.utils.json_to_sheet(colorRows);
+      wsColors['!cols'] = [
+        { wch: 12 }, // ID_Gráfico
+        { wch: 20 }, // Dataset
+        { wch: 20 }, // Rótulo (opcional para pizza/rosca)
+        { wch: 15 }, // Cor
+        { wch: 12 }, // Tipo (opcional para combo)
+        { wch: 12 }, // Eixo Y (opcional para combo)
+        { wch: 15 }  // Formato (opcional para combo)
+      ];
+      XLSX.utils.book_append_sheet(wb, wsColors, 'Cores');
+
+      // ===== ABA 4: EIXOS (apenas para gráficos combo) =====
+      if (indicator.chart_type === 'combo' && indicator.options) {
+        const axisRows = [];
+        const leftAxis = indicator.options.leftAxis || {};
+        const rightAxis = indicator.options.rightAxis || {};
+        
+        axisRows.push({
+          'ID_Gráfico': 'G1',
+          'Eixo': 'Esquerdo',
+          'Mínimo': leftAxis.min !== undefined && leftAxis.min !== null ? leftAxis.min : '',
+          'Máximo': leftAxis.max !== undefined && leftAxis.max !== null ? leftAxis.max : ''
+        });
+        
+        axisRows.push({
+          'ID_Gráfico': 'G1',
+          'Eixo': 'Direito',
+          'Mínimo': rightAxis.min !== undefined && rightAxis.min !== null ? rightAxis.min : '',
+          'Máximo': rightAxis.max !== undefined && rightAxis.max !== null ? rightAxis.max : ''
+        });
+
+        const wsAxis = XLSX.utils.json_to_sheet(axisRows);
+        wsAxis['!cols'] = [
+          { wch: 12 }, // ID_Gráfico
+          { wch: 12 }, // Eixo
+          { wch: 12 }, // Mínimo
+          { wch: 12 }  // Máximo
+        ];
+        XLSX.utils.book_append_sheet(wb, wsAxis, 'Eixos');
+      }
+
+      // Download do arquivo
+      const fileName = `${indicator.title.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      
+      console.log('✅ Indicador exportado:', indicator.title);
+    } catch (error) {
+      console.error('❌ Erro ao exportar indicador:', error);
+      alert('Erro ao exportar indicador. Tente novamente.');
+    }
+  };
+
+  // Exportar indicador individual como imagem PNG
+  const handleExportIndicatorImage = async (indicatorId, indicatorTitle) => {
+    try {
+      // Encontrar o card do indicador pelo ID
+      const cardElement = document.querySelector(`[data-indicator-id="${indicatorId}"]`);
+      
+      if (!cardElement) {
+        alert('Erro ao localizar o indicador. Tente novamente.');
+        return;
+      }
+
+      // Encontrar APENAS os botões de ação (não a legenda) usando classe específica
+      const actionButtons = cardElement.querySelectorAll('.indicator-action-buttons');
+      
+      // Ocultar botões temporariamente
+      actionButtons.forEach(btn => {
+        btn.style.display = 'none';
+      });
+
+      // Aguardar um momento para garantir que o DOM foi atualizado
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Usar html2canvas para capturar o card
+      const canvas = await html2canvas(cardElement, {
+        backgroundColor: '#ffffff',
+        scale: 2, // Maior qualidade
+        logging: false,
+        useCORS: true,
+        allowTaint: true
+      });
+
+      // Restaurar botões
+      actionButtons.forEach(btn => {
+        btn.style.display = '';
+      });
+
+      // Converter canvas para blob
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          alert('Erro ao gerar imagem. Tente novamente.');
+          return;
+        }
+
+        // Criar link de download
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const fileName = `${indicatorTitle.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.png`;
+        
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        console.log('✅ Imagem exportada:', indicatorTitle);
+      }, 'image/png');
+
+    } catch (error) {
+      console.error('❌ Erro ao exportar imagem:', error);
+      alert('Erro ao exportar imagem. Tente novamente.');
+      
+      // Garantir que os botões sejam restaurados em caso de erro
+      const cardElement = document.querySelector(`[data-indicator-id="${indicatorId}"]`);
+      if (cardElement) {
+        const actionButtons = cardElement.querySelectorAll('.indicator-action-buttons');
+        actionButtons.forEach(btn => {
+          btn.style.display = '';
+        });
+      }
     }
   };
 
@@ -2141,22 +2859,41 @@ export function ProjectDetails() {
   };
 
   const handleImportFileChange = async (event) => {
+    console.log('🚀 Iniciando importação de indicadores...');
     const file = event.target.files[0];
-    if (!file) return;
+    if (!file) {
+      console.log('❌ Nenhum arquivo selecionado');
+      return;
+    }
+
+    console.log('📁 Arquivo selecionado:', file.name);
 
     try {
+      console.log('📖 Lendo arquivo...');
       const data = await file.arrayBuffer();
+      console.log('✅ ArrayBuffer criado, tamanho:', data.byteLength);
+      
       const wb = XLSX.read(data);
+      console.log('✅ Workbook criado');
+
+      console.log('📋 Abas encontradas no arquivo:', wb.SheetNames);
 
       // Verificar se tem as 3 abas necessárias
       const hasConfigSheet = wb.SheetNames.includes('Configurações') || wb.SheetNames.includes('Configuracoes');
       const hasDataSheet = wb.SheetNames.includes('Dados');
       const hasColorSheet = wb.SheetNames.includes('Cores');
 
+      console.log('✅ Tem aba Configurações?', hasConfigSheet);
+      console.log('✅ Tem aba Dados?', hasDataSheet);
+      console.log('✅ Tem aba Cores?', hasColorSheet);
+
       // Se não tiver as 3 abas, tentar formato antigo (compatibilidade)
       if (!hasConfigSheet || !hasDataSheet) {
+        console.log('⚠️ Formato de 3 abas não detectado, tentando formato legado...');
         return await handleImportLegacyFormat(wb, event);
       }
+
+      console.log('✨ Formato de 3 abas detectado! Processando...');
 
       // ===== PROCESSAR FORMATO DE 3 ABAS =====
 
@@ -2164,13 +2901,42 @@ export function ProjectDetails() {
       const configSheetName = wb.SheetNames.find(name => name === 'Configurações' || name === 'Configuracoes');
       const configData = XLSX.utils.sheet_to_json(wb.Sheets[configSheetName]);
 
+      console.log('📋 Dados da aba Configurações:', configData);
+
       if (configData.length === 0) {
         alert('A aba "Configurações" está vazia.');
         return;
       }
 
-      // Ler aba de Dados
-      const dataData = XLSX.utils.sheet_to_json(wb.Sheets['Dados']);
+      // Ler aba de Dados preservando formatação original dos labels
+      const dataSheet = wb.Sheets['Dados'];
+      
+      // Extrair labels do cabeçalho preservando formatação original
+      const dataRange = XLSX.utils.decode_range(dataSheet['!ref']);
+      const originalLabels = [];
+      const labelMapping = {}; // Mapear label original para label convertido
+      
+      for (let col = dataRange.s.c; col <= dataRange.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+        const cell = dataSheet[cellAddress];
+        
+        if (cell && cell.v !== undefined) {
+          const headerValue = String(cell.v);
+          // Se a célula tem formato de texto (w), usar ele; senão usar o valor (v)
+          const formattedLabel = cell.w || headerValue;
+          originalLabels.push(formattedLabel);
+          labelMapping[formattedLabel] = headerValue;
+        }
+      }
+      
+      console.log('🏷️ Labels originais do cabeçalho:', originalLabels);
+      
+      const dataData = XLSX.utils.sheet_to_json(dataSheet, { 
+        raw: false,  // Usar valores formatados
+        defval: ''   // Valor padrão para células vazias
+      });
+
+      console.log('📋 Dados da aba Dados:', dataData);
 
       if (dataData.length === 0) {
         alert('A aba "Dados" está vazia.');
@@ -2179,51 +2945,105 @@ export function ProjectDetails() {
 
       // Ler aba de Cores (opcional)
       const colorData = hasColorSheet ? XLSX.utils.sheet_to_json(wb.Sheets['Cores']) : [];
+      
+      console.log('🎨 Dados da aba Cores:', colorData);
 
       // Agrupar dados por ID_Gráfico
       const graphsMap = new Map();
 
       // Processar configurações
       configData.forEach(row => {
+        console.log('🔍 Processando linha de configuração:', row);
         const id = row['ID'] || row['id'];
-        if (!id) return;
+        if (!id) {
+          console.warn('⚠️ Linha sem ID, ignorando:', row);
+          return;
+        }
 
-        graphsMap.set(id, {
+        const sizeStr = String(row['Tamanho'] || row['tamanho'] || '').toLowerCase();
+        const size = sizeStr.includes('2') ? 'large' : 'normal';
+        const order = row['Ordem'] || row['ordem'] || row['order'];
+        
+        // Normalizar tipo de gráfico
+        let chartType = String(row['Tipo'] || row['tipo'] || row['type'] || 'bar').toLowerCase().trim();
+        // Mapear possíveis variações
+        if (chartType === 'barra') chartType = 'bar';
+        if (chartType === 'linha') chartType = 'line';
+        if (chartType === 'pizza') chartType = 'pie';
+        if (chartType === 'rosca') chartType = 'doughnut';
+        
+        // Mapear formato do Excel para o formato interno
+        const formatoExcel = String(row['Formato'] || row['formato'] || row['format'] || 'Numérico').toLowerCase();
+        let valueFormat = 'number'; // default
+        
+        if (formatoExcel.includes('monetário') || formatoExcel.includes('monetario') || formatoExcel.includes('brl') || formatoExcel.includes('r$')) {
+          valueFormat = 'currency';
+        } else if (formatoExcel.includes('usd') || formatoExcel.includes('dólar') || formatoExcel.includes('dolar') || formatoExcel.includes('$')) {
+          valueFormat = 'currency-usd';
+        } else if (formatoExcel.includes('percent') || formatoExcel.includes('%') || formatoExcel === 'percentage') {
+          valueFormat = 'percentage';
+        } else if (formatoExcel.includes('numérico') || formatoExcel.includes('numerico') || formatoExcel === 'number') {
+          valueFormat = 'number';
+        }
+
+        const graphConfig = {
           id,
           title: row['Título'] || row['Titulo'] || row['title'] || '',
-          chart_type: row['Tipo'] || row['tipo'] || row['type'] || 'bar',
-          valueFormat: row['Formato'] || row['formato'] || row['format'] || 'Numérico',
+          chart_type: chartType,
+          valueFormat,
+          size,
+          order: order !== undefined ? parseInt(order) : undefined,
           labels: [],
           datasets: []
-        });
+        };
+        
+        console.log('✅ Gráfico configurado:', graphConfig);
+        graphsMap.set(id, graphConfig);
       });
 
       // Processar dados
-      dataData.forEach(row => {
+      console.log(`\n🔄 Processando ${dataData.length} linha(s) de dados...`);
+      dataData.forEach((row, index) => {
+        console.log(`\n📊 Linha ${index + 1}:`, row);
         const graphId = row['ID_Gráfico'] || row['ID_Grafico'] || row['id'];
         const datasetName = row['Dataset'] || row['dataset'];
         
-        if (!graphId || !datasetName) return;
+        console.log(`   graphId: "${graphId}", datasetName: "${datasetName}"`);
+        
+        if (!graphId || !datasetName) {
+          console.warn('⚠️ Linha sem ID_Gráfico ou Dataset, ignorando');
+          return;
+        }
 
         const graph = graphsMap.get(graphId);
-        if (!graph) return;
+        if (!graph) {
+          console.warn(`⚠️ Gráfico "${graphId}" não encontrado no map`);
+          return;
+        }
+        
+        console.log(`✅ Gráfico encontrado: ${graph.id}`);
 
-        // Extrair rótulos (todas as colunas exceto ID_Gráfico e Dataset)
-        const labels = Object.keys(row).filter(key => 
-          key !== 'ID_Gráfico' && key !== 'ID_Grafico' && key !== 'id' && 
-          key !== 'Dataset' && key !== 'dataset'
+        // Usar labels originais do cabeçalho (preservando formatação)
+        const labels = originalLabels.filter(label => 
+          label !== 'ID_Gráfico' && label !== 'ID_Grafico' && label !== 'id' && 
+          label !== 'Dataset' && label !== 'dataset'
         );
 
         // Se ainda não temos labels, definir agora
         if (graph.labels.length === 0) {
           graph.labels = labels;
+          console.log(`   Labels definidos (preservados):`, labels);
         }
 
-        // Extrair valores
+        // Extrair valores usando os labels originais
         const values = labels.map(label => {
           const val = row[label];
-          return val !== undefined && val !== null && val !== '' ? parseFloat(val) : 0;
+          const parsed = val !== undefined && val !== null && val !== '' ? parseFloat(val) : 0;
+          console.log(`   "${label}": ${val} → ${parsed}`);
+          return parsed;
         });
+
+        console.log(`   Valores extraídos:`, values);
 
         // Adicionar dataset
         graph.datasets.push({
@@ -2231,40 +3051,102 @@ export function ProjectDetails() {
           values,
           color: '#8884d8' // Cor padrão, será substituída se houver na aba Cores
         });
+        
+        console.log(`✅ Dataset "${datasetName}" adicionado com ${values.length} valores`);
       });
 
       // Processar cores
-      colorData.forEach(row => {
+      console.log(`\n🎨 Processando ${colorData.length} linha(s) de cores...`);
+      colorData.forEach((row, index) => {
+        console.log(`\n🎨 Cor ${index + 1}:`, row);
         const graphId = row['ID_Gráfico'] || row['ID_Grafico'] || row['id'];
         const datasetName = row['Dataset'] || row['dataset'];
         const color = row['Cor'] || row['cor'] || row['color'];
         const labelName = row['Rótulo'] || row['Rotulo'] || row['rotulo'] || row['label'];
+        const chartType = row['Tipo'] || row['tipo'] || row['type']; // Para gráficos combo
 
-        if (!graphId || !datasetName || !color) return;
+        console.log(`   graphId: "${graphId}", dataset: "${datasetName}", cor: "${color}", rótulo: "${labelName}"`);
+
+        if (!graphId || !datasetName || !color) {
+          console.warn('⚠️ Dados incompletos, ignorando');
+          return;
+        }
 
         const graph = graphsMap.get(graphId);
-        if (!graph) return;
+        if (!graph) {
+          console.warn(`⚠️ Gráfico "${graphId}" não encontrado`);
+          return;
+        }
+        
+        console.log(`✅ Gráfico encontrado: ${graph.id}, tipo: ${graph.chart_type}`);
 
         // Encontrar dataset
         const dataset = graph.datasets.find(ds => ds.name === datasetName) || graph.datasets[0];
-        if (!dataset) return;
+        if (!dataset) {
+          console.warn(`⚠️ Dataset "${datasetName}" não encontrado`);
+          return;
+        }
+        
+        console.log(`✅ Dataset encontrado: ${dataset.name}`);
 
         // Para pizza/rosca: permitir cores por fatia (array colors alinhado a labels)
         if (graph.chart_type === 'pie' || graph.chart_type === 'doughnut') {
+          console.log(`   É gráfico de pizza/rosca`);
           const labels = Array.isArray(graph.labels) ? graph.labels : [];
+          console.log(`   Labels do gráfico:`, labels);
           const idx = labelName ? labels.findIndex(l => String(l).trim() === String(labelName).trim()) : -1;
-          if (!Array.isArray(dataset.colors)) dataset.colors = Array(labels.length).fill('#8884d8');
+          console.log(`   Índice do rótulo "${labelName}":`, idx);
+          
+          if (!Array.isArray(dataset.colors)) {
+            dataset.colors = Array(labels.length).fill('#8884d8');
+            console.log(`   Array de cores inicializado:`, dataset.colors);
+          }
+          
           if (idx >= 0) {
             dataset.colors[idx] = color;
+            console.log(`   ✅ Cor "${color}" aplicada ao índice ${idx}`);
           } else if (labels.length > 0) {
             // Se não especificou rótulo, preencher sequencialmente a próxima posição vazia
             const next = dataset.colors.findIndex(c => !c || c === '#8884d8');
             const target = next >= 0 ? next : 0;
             dataset.colors[target] = color;
+            console.log(`   ✅ Cor "${color}" aplicada ao índice ${target} (sequencial)`);
           }
         } else {
           // Demais tipos: cor por dataset
           dataset.color = color;
+          console.log(`   ✅ Cor "${color}" aplicada ao dataset`);
+          
+          // Para gráficos combo, definir o tipo de renderização (bar/line), eixo Y e formato
+          if (graph.chart_type === 'combo') {
+            if (chartType) {
+              dataset.chartType = chartType.toLowerCase() === 'line' ? 'line' : 'bar';
+              console.log(`   ✅ Tipo de renderização definido: ${dataset.chartType}`);
+            }
+            
+            // Processar Eixo Y
+            const yAxisId = row['Eixo Y'] || row['eixo_y'] || row['yAxisId'];
+            if (yAxisId) {
+              dataset.yAxisId = yAxisId.toLowerCase().includes('direito') || yAxisId.toLowerCase().includes('right') ? 'right' : 'left';
+              console.log(`   ✅ Eixo Y definido: ${dataset.yAxisId}`);
+            }
+            
+            // Processar Formato
+            const formato = row['Formato'] || row['formato'] || row['format'];
+            if (formato) {
+              const formatoLower = String(formato).toLowerCase().trim();
+              if (formatoLower.includes('usd') || formatoLower.includes('dólar') || formatoLower.includes('dolar')) {
+                dataset.valueFormat = 'currency-usd';
+              } else if (formatoLower === 'currency' || formatoLower.includes('brl') || formatoLower.includes('r$') || formatoLower.includes('monetário') || formatoLower.includes('monetario')) {
+                dataset.valueFormat = 'currency';
+              } else if (formatoLower === 'percentage' || formatoLower.includes('percent') || formatoLower.includes('%')) {
+                dataset.valueFormat = 'percentage';
+              } else if (formatoLower === 'number' || formatoLower.includes('numérico') || formatoLower.includes('numerico')) {
+                dataset.valueFormat = 'number';
+              }
+              console.log(`   ✅ Formato definido: ${dataset.valueFormat}`);
+            }
+          }
         }
       });
 
@@ -2291,18 +3173,122 @@ export function ProjectDetails() {
         }
       });
 
-      // Converter Map para array de indicadores
-      const indicatorsToImport = Array.from(graphsMap.values())
-        .filter(graph => graph.title && graph.datasets.length > 0)
-        .map(graph => ({
-          title: graph.title,
-          chart_type: graph.chart_type,
-          labels: graph.labels,
-          datasets: graph.datasets,
-          options: {
-            valueFormat: graph.valueFormat
+      // Processar aba Eixos (opcional, apenas para gráficos combo)
+      const hasAxisSheet = wb.SheetNames.includes('Eixos');
+      if (hasAxisSheet) {
+        const axisData = XLSX.utils.sheet_to_json(wb.Sheets['Eixos']);
+        console.log(`\n📏 Processando ${axisData.length} linha(s) de eixos...`);
+        
+        axisData.forEach((row, index) => {
+          const graphId = row['ID_Gráfico'] || row['ID_Grafico'] || row['id'];
+          const eixo = row['Eixo'] || row['eixo'];
+          const titulo = row['Título'] || row['Titulo'] || row['titulo'] || row['title'];
+          const minimo = row['Mínimo'] || row['minimo'] || row['min'];
+          const maximo = row['Máximo'] || row['maximo'] || row['max'];
+          
+          console.log(`\n📏 Eixo ${index + 1}:`, row);
+          
+          if (!graphId || !eixo) {
+            console.warn('⚠️ Dados incompletos, ignorando');
+            return;
           }
-        }));
+          
+          const graph = graphsMap.get(graphId);
+          if (!graph) {
+            console.warn(`⚠️ Gráfico "${graphId}" não encontrado`);
+            return;
+          }
+          
+          if (graph.chart_type !== 'combo') {
+            console.warn(`⚠️ Gráfico "${graphId}" não é combo, ignorando configuração de eixos`);
+            return;
+          }
+          
+          // Inicializar options se não existir
+          if (!graph.axisConfig) {
+            graph.axisConfig = { leftAxis: {}, rightAxis: {} };
+          }
+          
+          const isLeft = eixo.toLowerCase().includes('esquerdo') || eixo.toLowerCase().includes('left');
+          const axisKey = isLeft ? 'leftAxis' : 'rightAxis';
+          
+          if (titulo !== undefined && titulo !== null && titulo !== '') {
+            graph.axisConfig[axisKey].title = String(titulo);
+            console.log(`   ✅ ${axisKey} título definido: ${graph.axisConfig[axisKey].title}`);
+          }
+          
+          if (minimo !== undefined && minimo !== null && minimo !== '') {
+            graph.axisConfig[axisKey].min = parseFloat(minimo);
+            console.log(`   ✅ ${axisKey} mínimo definido: ${graph.axisConfig[axisKey].min}`);
+          }
+          
+          if (maximo !== undefined && maximo !== null && maximo !== '') {
+            graph.axisConfig[axisKey].max = parseFloat(maximo);
+            console.log(`   ✅ ${axisKey} máximo definido: ${graph.axisConfig[axisKey].max}`);
+          }
+        });
+      }
+
+      // Converter Map para array de indicadores
+      console.log('\n📊 RESUMO DOS GRÁFICOS PROCESSADOS:');
+      console.log(`   Total de gráficos: ${graphsMap.size}`);
+      graphsMap.forEach((graph, id) => {
+        console.log(`\n   Gráfico ${id}:`);
+        console.log(`      Título: ${graph.title}`);
+        console.log(`      Tipo: ${graph.chart_type}`);
+        console.log(`      Formato: ${graph.valueFormat}`);
+        console.log(`      Labels: ${graph.labels.length} (${graph.labels.join(', ')})`);
+        console.log(`      Datasets: ${graph.datasets.length}`);
+        graph.datasets.forEach((ds, idx) => {
+          console.log(`         Dataset ${idx + 1}: ${ds.name} (${ds.values.length} valores)`);
+          if (ds.colors) console.log(`            Cores:`, ds.colors);
+          else if (ds.color) console.log(`            Cor:`, ds.color);
+        });
+        if (graph.axisConfig) {
+          console.log(`      Configuração de Eixos:`, graph.axisConfig);
+        }
+      });
+      
+      const indicatorsToImport = Array.from(graphsMap.values())
+        .filter(graph => {
+          const isValid = graph.title && graph.datasets.length > 0;
+          if (!isValid) {
+            console.warn('⚠️ Gráfico inválido (sem título ou datasets):', graph);
+          }
+          return isValid;
+        })
+        .map(graph => {
+          const options = {
+            valueFormat: graph.valueFormat
+          };
+          
+          // Adicionar configuração de eixos para gráficos combo
+          if (graph.chart_type === 'combo' && graph.axisConfig) {
+            options.leftAxis = graph.axisConfig.leftAxis;
+            options.rightAxis = graph.axisConfig.rightAxis;
+          }
+          
+          const indicator = {
+            title: graph.title,
+            chart_type: graph.chart_type,
+            labels: graph.labels,
+            datasets: graph.datasets,
+            size: graph.size || 'normal',
+            order: graph.order,
+            options
+          };
+          console.log('✨ Indicador mapeado:', indicator);
+          return indicator;
+        })
+        .sort((a, b) => {
+          // Ordenar por ordem se disponível
+          if (a.order !== undefined && b.order !== undefined) {
+            return a.order - b.order;
+          }
+          return 0;
+        });
+
+      console.log('📊 Indicadores processados para importação:', indicatorsToImport);
 
       if (indicatorsToImport.length === 0) {
         alert('Nenhum indicador válido encontrado no arquivo.');
@@ -2319,22 +3305,30 @@ export function ProjectDetails() {
       if (!confirmed) return;
 
       // Importar indicadores
+      console.log(`\n💾 INICIANDO IMPORTAÇÃO NO SUPABASE...`);
       let successCount = 0;
       let errorCount = 0;
 
       for (const indicatorData of indicatorsToImport) {
         try {
+          console.log(`\n📤 Importando: "${indicatorData.title}"`);
+          console.log(`   Dados:`, JSON.stringify(indicatorData, null, 2));
+          
           // Verificar se já existe um indicador com o mesmo título
           const existing = project.project_indicators?.find(ind => ind.title === indicatorData.title);
           
           if (existing) {
+            console.log(`   ⚠️ Indicador já existe, atualizando...`);
             await updateProjectIndicator(project.id, existing.id, indicatorData);
+            console.log(`   ✅ Indicador atualizado com sucesso`);
           } else {
+            console.log(`   ➕ Criando novo indicador...`);
             await addProjectIndicator(project.id, indicatorData);
+            console.log(`   ✅ Indicador criado com sucesso`);
           }
           successCount++;
         } catch (error) {
-          console.error('Erro ao importar indicador:', indicatorData.title, error);
+          console.error(`   ❌ Erro ao importar indicador "${indicatorData.title}":`, error);
           errorCount++;
         }
       }
@@ -2343,21 +3337,28 @@ export function ProjectDetails() {
         ? `${successCount} indicador(es) importado(s) com sucesso!\n${errorCount} erro(s) encontrado(s).`
         : `${successCount} indicador(es) importado(s) com sucesso!`;
       
+      console.log(`\n✅ IMPORTAÇÃO CONCLUÍDA!`);
+      console.log(`   Sucessos: ${successCount}`);
+      console.log(`   Erros: ${errorCount}`);
       alert(message);
     } catch (error) {
-      console.error('Erro ao importar arquivo:', error);
-      alert('Erro ao processar o arquivo. Verifique se é um arquivo Excel válido com as abas: Configurações, Dados e Cores.');
+      console.error('❌ ERRO CRÍTICO ao importar arquivo:', error);
+      console.error('Stack trace:', error.stack);
+      alert('Erro ao processar o arquivo. Verifique se é um arquivo Excel válido com as abas: Configurações, Dados e Cores.\n\nDetalhes: ' + error.message);
     }
 
     // Limpar input
+    console.log('🧹 Limpando input de arquivo');
     event.target.value = null;
   };
 
   // Função auxiliar para importar formato antigo (compatibilidade)
   const handleImportLegacyFormat = async (wb, event) => {
+    console.log('📜 Processando formato legado (1 aba)...');
     try {
       const ws = wb.Sheets[wb.SheetNames[0]];
       const jsonData = XLSX.utils.sheet_to_json(ws);
+      console.log('📊 Dados do formato legado:', jsonData);
 
       if (jsonData.length === 0) {
         alert('O arquivo não contém dados válidos.');
@@ -2438,6 +3439,197 @@ export function ProjectDetails() {
     } catch (error) {
       console.error('Erro ao importar formato antigo:', error);
       alert('Erro ao processar o arquivo no formato antigo.');
+    }
+  };
+
+  // Função para carregar modelo selecionado
+  const handleTemplateSelect = async (filename) => {
+    console.log('📋 Carregando modelo:', filename);
+    
+    try {
+      // Carregar arquivo do modelo
+      const response = await fetch(`/modelo_indicadores/${filename}`);
+      if (!response.ok) {
+        throw new Error('Erro ao carregar modelo');
+      }
+      
+      const arrayBuffer = await response.arrayBuffer();
+      const wb = XLSX.read(arrayBuffer);
+      
+      console.log('📋 Modelo carregado, abas:', wb.SheetNames);
+      
+      // Verificar formato (3 abas)
+      const hasConfigSheet = wb.SheetNames.includes('Configurações') || wb.SheetNames.includes('Configuracoes');
+      const hasDataSheet = wb.SheetNames.includes('Dados');
+      
+      if (!hasConfigSheet || !hasDataSheet) {
+        alert('Modelo inválido. Formato esperado: 3 abas (Configurações, Dados, Cores)');
+        return;
+      }
+      
+      // Ler configuração
+      const configSheetName = wb.SheetNames.find(name => name === 'Configurações' || name === 'Configuracoes');
+      const configData = XLSX.utils.sheet_to_json(wb.Sheets[configSheetName]);
+      
+      if (configData.length === 0) {
+        alert('Modelo sem configuração válida');
+        return;
+      }
+      
+      // Pegar primeiro gráfico (modelos têm apenas 1 gráfico)
+      const config = configData[0];
+      const graphId = config['ID'] || config['id'];
+      
+      // Processar dados do modelo
+      const dataSheet = wb.Sheets['Dados'];
+      const dataRange = XLSX.utils.decode_range(dataSheet['!ref']);
+      const parsedLabels = [];
+      const labelMapping = {}; // Mapear label formatado para label do Excel
+      
+      for (let col = dataRange.s.c; col <= dataRange.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+        const cell = dataSheet[cellAddress];
+        
+        if (cell && cell.v !== undefined) {
+          const headerValue = String(cell.v);
+          if (headerValue !== 'ID_Gráfico' && headerValue !== 'ID_Grafico' && 
+              headerValue !== 'id' && headerValue !== 'Dataset' && headerValue !== 'dataset') {
+            // Usar formato visual (w) se disponível, senão usar valor
+            const formattedLabel = cell.w || headerValue;
+            parsedLabels.push(formattedLabel);
+            // Mapear label formatado para o que o Excel usa no JSON
+            labelMapping[formattedLabel] = headerValue;
+          }
+        }
+      }
+      
+      console.log('🏷️ [MODELO] Labels preservados:', parsedLabels);
+      console.log('🗺️ [MODELO] Mapeamento:', labelMapping);
+      
+      // Usar raw: true para pegar valores numéricos puros (importante para células formatadas como moeda)
+      const dataData = XLSX.utils.sheet_to_json(dataSheet, { raw: true, defval: '' });
+      const graphData = dataData.filter(row => {
+        const rowId = row['ID_Gráfico'] || row['ID_Grafico'] || row['id'];
+        return rowId === graphId;
+      });
+      
+      console.log('📊 [MODELO] Dados filtrados:', graphData);
+      
+      const parsedDatasets = graphData.map(row => {
+        const datasetName = row['Dataset'] || row['dataset'] || 'Série 1';
+        const values = parsedLabels.map(label => {
+          // Tentar usar o label formatado diretamente, senão usar o mapeamento
+          let val = row[label];
+          if (val === undefined && labelMapping[label]) {
+            val = row[labelMapping[label]];
+          }
+          
+          // Processar valor: pode ser número, string numérica ou string formatada como moeda
+          let parsed = 0;
+          if (val !== undefined && val !== null && val !== '') {
+            if (typeof val === 'number') {
+              parsed = val;
+            } else if (typeof val === 'string') {
+              // Remover formatação de moeda (R$, $, pontos, vírgulas) e converter
+              const cleanValue = val.replace(/[R$\s.]/g, '').replace(',', '.');
+              parsed = parseFloat(cleanValue) || 0;
+            }
+          }
+          
+          console.log(`   [MODELO] "${label}": ${val} (${typeof val}) → ${parsed}`);
+          return parsed;
+        });
+        
+        return {
+          name: datasetName,
+          values,
+          color: '#8884d8'
+        };
+      });
+      
+      // Processar cores se houver
+      const hasColorSheet = wb.SheetNames.includes('Cores');
+      if (hasColorSheet) {
+        const colorData = XLSX.utils.sheet_to_json(wb.Sheets['Cores']);
+        const graphColors = colorData.filter(row => {
+          const rowId = row['ID_Gráfico'] || row['ID_Grafico'] || row['id'];
+          return rowId === graphId;
+        });
+        
+        graphColors.forEach(row => {
+          const datasetName = row['Dataset'] || row['dataset'];
+          const color = row['Cor'] || row['cor'] || row['color'];
+          const chartType = row['Tipo'] || row['tipo'] || row['type'];
+          const labelName = row['Rótulo'] || row['Rotulo'] || row['rotulo'] || row['label'];
+          
+          const dataset = parsedDatasets.find(ds => ds.name === datasetName);
+          if (dataset && color) {
+            const importedChart = String(config['Tipo'] || config['tipo'] || config['type'] || 'bar').toLowerCase().trim();
+            
+            if (importedChart === 'pie' || importedChart === 'doughnut') {
+              if (!dataset.colors) {
+                dataset.colors = Array(parsedLabels.length).fill('#8884d8');
+              }
+              if (labelName) {
+                const idx = parsedLabels.findIndex(l => String(l).trim() === String(labelName).trim());
+                if (idx >= 0) {
+                  dataset.colors[idx] = color;
+                }
+              }
+            } else {
+              dataset.color = color;
+            }
+            
+            if (importedChart === 'combo' && chartType) {
+              const normalizedType = chartType.toLowerCase().trim();
+              dataset.chartType = normalizedType === 'line' || normalizedType === 'linha' ? 'line' : 'bar';
+            }
+          }
+        });
+      }
+      
+      // Normalizar tipo
+      let chartType = String(config['Tipo'] || config['tipo'] || config['type'] || 'bar').toLowerCase().trim();
+      if (chartType === 'barra') chartType = 'bar';
+      if (chartType === 'linha') chartType = 'line';
+      if (chartType === 'pizza') chartType = 'pie';
+      if (chartType === 'rosca') chartType = 'doughnut';
+      
+      // Normalizar formato
+      const formatoExcel = String(config['Formato'] || config['formato'] || config['format'] || 'Numérico').toLowerCase();
+      let valueFormat = 'number';
+      if (formatoExcel.includes('monetário') || formatoExcel.includes('monetario') || formatoExcel.includes('brl') || formatoExcel.includes('r$')) {
+        valueFormat = 'currency';
+      } else if (formatoExcel.includes('usd') || formatoExcel.includes('dólar') || formatoExcel.includes('dolar') || formatoExcel.includes('$')) {
+        valueFormat = 'currency-usd';
+      } else if (formatoExcel.includes('percent') || formatoExcel.includes('%') || formatoExcel === 'percentage') {
+        valueFormat = 'percentage';
+      }
+      
+      // Criar indicador com dados do modelo
+      const indicatorData = {
+        title: config['Título'] || config['Titulo'] || config['title'] || 'Novo Indicador',
+        chart_type: chartType,
+        labels: parsedLabels,
+        datasets: parsedDatasets,
+        options: {
+          valueFormat,
+          showDataLabels: true
+        }
+      };
+      
+      console.log('✅ Modelo processado:', indicatorData);
+      
+      // Salvar indicador
+      await addProjectIndicator(project.id, indicatorData);
+      
+      setShowTemplateSelector(false);
+      alert('Modelo importado com sucesso!');
+      
+    } catch (error) {
+      console.error('❌ Erro ao carregar modelo:', error);
+      alert('Erro ao carregar modelo: ' + error.message);
+      setShowTemplateSelector(false);
     }
   };
 
@@ -2651,8 +3843,6 @@ export function ProjectDetails() {
               Adicionar Membro
             </Button>
           )}
-
-          {activeTab === 'indicators' && null}
         </div>
 
         <TabsContent value="preliminary" className="pl-4 pb-8">
@@ -2695,25 +3885,47 @@ export function ProjectDetails() {
         <TabsContent value="indicators" className="space-y-4 pl-4 pb-8">
           <div className="flex gap-2 mb-3">
             {canEdit && (
-              <Button onClick={() => { setEditingIndicator(null); setShowIndicatorModal(true); }} size="sm" className="gap-1">
-                <Plus className="h-4 w-4" />
-                Incluir gráfico
-              </Button>
+              <>
+                <Button onClick={() => setShowTemplateSelector(true)} variant="outline" size="sm" className="gap-1">
+                  <Plus className="h-4 w-4" />
+                  Adicionar Modelo
+                </Button>
+                <Button onClick={() => { setEditingIndicator(null); setShowIndicatorModal(true); }} variant="outline" size="sm" className="gap-1">
+                  <FilePlus2 className="h-4 w-4" />
+                  Criar do zero
+                </Button>
+              </>
+            )}
+            {project?.project_indicators && project.project_indicators.length > 0 && canEdit && (
+              <>
+                {isEditingIndicators ? (
+                  <Button onClick={() => setIsEditingIndicators(false)} size="sm" className="bg-exxata-red hover:bg-red-700">
+                    Finalizar Edição
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={() => setIsEditingIndicators(true)} size="sm" className="gap-1">
+                    <Edit3 className="h-4 w-4" />
+                    Editar Gráficos
+                  </Button>
+                )}
+              </>
             )}
             {project?.project_indicators && project.project_indicators.length > 0 && (
-              <Button onClick={handleExportPDF} variant="outline" size="sm" className="gap-1" disabled={isExportingPDF}>
-                <FileDown className="h-4 w-4" />
-                {isExportingPDF ? 'Exportando...' : 'Exportar PDF'}
-              </Button>
+              <>
+                <Button onClick={handleExportIndicators} variant="outline" size="sm" className="gap-1">
+                  <Download className="h-4 w-4" />
+                  Exportar Excel
+                </Button>
+                <Button onClick={handleImportIndicators} variant="outline" size="sm" className="gap-1">
+                  <Upload className="h-4 w-4" />
+                  Importar Excel
+                </Button>
+                <Button onClick={handleExportPDF} variant="outline" size="sm" className="gap-1" disabled={isExportingPDF}>
+                  <FileDown className="h-4 w-4" />
+                  {isExportingPDF ? 'Exportando...' : 'Exportar PDF'}
+                </Button>
+              </>
             )}
-            <Button onClick={handleExportIndicators} variant="outline" size="sm" className="gap-1">
-              <Download className="h-4 w-4" />
-              Exportar Excel
-            </Button>
-            <Button onClick={handleImportIndicators} variant="outline" size="sm" className="gap-1">
-              <Upload className="h-4 w-4" />
-              Importar Excel
-            </Button>
             <input
               id="indicator-import-input"
               type="file"
@@ -2724,7 +3936,7 @@ export function ProjectDetails() {
           </div>
           {project?.project_indicators && project.project_indicators.length > 0 ? (
             <div ref={indicatorsContainerRef} className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-              {canEdit && (
+              {canEdit && !isEditingIndicators && (
                 <Card className="border-dashed border-2 flex items-center justify-center min-h-[220px]">
                   <CardContent className="flex flex-col items-center justify-center gap-3 text-center">
                     <span className="text-sm text-muted-foreground">Crie um novo indicador diretamente por aqui.</span>
@@ -2736,39 +3948,90 @@ export function ProjectDetails() {
                 </Card>
               )}
               {project.project_indicators.map(indicator => (
-                <Card key={indicator.id} className="chart-card">
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle>{indicator.title}</CardTitle>
-                    {canEdit && (
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => { setEditingIndicator(indicator); setShowIndicatorModal(true); }}>
-                          <Edit3 className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => {
-                          if (window.confirm('Tem certeza que deseja deletar este indicador?')) {
-                            deleteProjectIndicator(project.id, indicator.id);
-                          }
-                        }} className="text-red-500 hover:text-red-600">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <IndicatorChart indicator={indicator} />
-                    {indicator.observations && (
-                      <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
-                        <div className="flex items-start gap-2">
-                          <FileText className="h-4 w-4 text-slate-500 mt-0.5 flex-shrink-0" />
-                          <div className="flex-1">
-                            <p className="text-xs font-medium text-slate-700 mb-1">Análise Exxata</p>
-                            <p className="text-sm text-slate-600 whitespace-pre-wrap">{indicator.observations}</p>
+                <div
+                  key={indicator.id}
+                  draggable={isEditingIndicators}
+                  onDragStart={(e) => handleIndicatorDragStart(indicator.id, e)}
+                  onDragOver={(e) => handleIndicatorDragOver(indicator.id, e)}
+                  onDrop={(e) => handleIndicatorDrop(indicator.id, e)}
+                  onDragEnd={handleIndicatorDragEnd}
+                  className={`
+                    ${indicator.size === 'large' ? 'lg:col-span-2' : 'lg:col-span-1'}
+                    ${dragOverIndicatorId === indicator.id ? 'ring-2 ring-exxata-red/40 rounded-lg' : ''}
+                  `}
+                  title={isEditingIndicators ? 'Arraste para reordenar' : undefined}
+                >
+                  <Card className="chart-card h-full" data-indicator-id={indicator.id}>
+                    <CardHeader className="flex flex-row items-center justify-between">
+                      <CardTitle>{indicator.title}</CardTitle>
+                      {canEdit && (
+                        <div className="flex gap-2 indicator-action-buttons">
+                          {isEditingIndicators && (
+                            <>
+                              <button
+                                type="button"
+                                className="text-slate-400 hover:text-slate-600 transition-colors"
+                                onClick={() => toggleIndicatorSize(indicator.id)}
+                                title={indicator.size === 'large' ? 'Reduzir para 1 coluna' : 'Expandir para 2 colunas'}
+                              >
+                                {indicator.size === 'large' ? (
+                                  <Minimize2 className="h-4 w-4" />
+                                ) : (
+                                  <Maximize2 className="h-4 w-4" />
+                                )}
+                              </button>
+                              <GripVertical className="h-4 w-4 text-slate-400 cursor-move" title="Arraste para reordenar" />
+                            </>
+                          )}
+                          {!isEditingIndicators && (
+                            <>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleExportSingleIndicator(indicator, project.project_indicators.indexOf(indicator))}
+                                title="Exportar Excel (3 abas)"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => handleExportIndicatorImage(indicator.id, indicator.title)}
+                                title="Exportar Imagem PNG"
+                              >
+                                <Camera className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => { setEditingIndicator(indicator); setShowIndicatorModal(true); }}>
+                                <Edit3 className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => {
+                                if (window.confirm('Tem certeza que deseja deletar este indicador?')) {
+                                  deleteProjectIndicator(project.id, indicator.id);
+                                }
+                              }} className="text-red-500 hover:text-red-600">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <IndicatorChart indicator={indicator} />
+                      {indicator.observations && (
+                        <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <FileText className="h-4 w-4 text-slate-500 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-slate-700 mb-1">Análise Exxata</p>
+                              <p className="text-sm text-slate-600 whitespace-pre-wrap">{indicator.observations}</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
               ))}
             </div>
           ) : (
@@ -2776,17 +4039,14 @@ export function ProjectDetails() {
               <p>Nenhum indicador cadastrado para este projeto.</p>
               {canEdit && (
                 <>
-                  <p className="text-sm mt-2">Clique em "Incluir gráfico" para adicionar o primeiro indicador.</p>
+                  <p className="text-sm mt-2">Clique em "Adicionar Modelo" para adicionar o primeiro indicador.</p>
                   <Button
                     className="mt-6 gap-2"
-                    onClick={() => {
-                      setEditingIndicator(null);
-                      setShowIndicatorModal(true);
-                    }}
+                    onClick={() => setShowTemplateSelector(true)}
                     size="sm"
                   >
                     <Plus className="h-4 w-4" />
-                    Incluir gráfico
+                    Adicionar Modelo
                   </Button>
                 </>
               )}
@@ -3840,6 +5100,14 @@ export function ProjectDetails() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Seletor de Modelos de Indicadores */}
+      {showTemplateSelector && (
+        <IndicatorTemplateSelector
+          onSelect={handleTemplateSelect}
+          onClose={() => setShowTemplateSelector(false)}
+        />
+      )}
     </div>
   );
 }
