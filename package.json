@@ -14,7 +14,8 @@
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "build:production": "NODE_ENV=production vite build",
     "analyze": "vite build --mode analyze",
-    "deploy:local": "npm run build && npm run preview"
+    "deploy:local": "npm run build && npm run preview",
+    "upload:templates": "node scripts/upload-templates-simple.js"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -50,6 +51,7 @@
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.21",
+    "dotenv": "^16.6.1",
     "eslint": "^8.57.1",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^4.6.2",

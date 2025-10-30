@@ -25,6 +25,96 @@ import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
+// ========== FUNÇÕES AUXILIARES GLOBAIS PARA IMPORTAÇÃO ==========
+
+// Função auxiliar para converter número de série do Excel em data formatada pt-BR
+const excelSerialToDate = (serial) => {
+  // Excel conta dias desde 1/1/1900 (com bug do ano 1900)
+  const excelEpoch = new Date(1899, 11, 30); // 30 de dezembro de 1899
+  const days = Math.floor(serial);
+  const date = new Date(excelEpoch.getTime() + days * 86400000);
+  
+  // Formatar como mmm/yyyy (ex: Jan/2025)
+  const month = date.getMonth();
+  const year = date.getFullYear();
+  const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  return `${monthNames[month]}/${year}`;
+};
+
+// Função auxiliar para processar labels do Excel (converte datas automaticamente)
+const processExcelLabels = (dataSheet) => {
+  const dataRange = XLSX.utils.decode_range(dataSheet['!ref']);
+  const originalLabels = [];
+  const labelMapping = {};
+  
+  for (let col = dataRange.s.c; col <= dataRange.e.c; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+    const cell = dataSheet[cellAddress];
+    
+    if (cell && cell.v !== undefined) {
+      let formattedLabel;
+      
+      // Verificar se é um número de série do Excel (data)
+      if (typeof cell.v === 'number' && cell.v > 40000 && cell.v < 60000) {
+        formattedLabel = excelSerialToDate(cell.v);
+        console.log(`📅 Data convertida: ${cell.v} → ${formattedLabel}`);
+      } else {
+        formattedLabel = cell.w || String(cell.v);
+      }
+      
+      originalLabels.push(formattedLabel);
+      labelMapping[formattedLabel] = cell.v;
+    }
+  }
+  
+  return { originalLabels, labelMapping };
+};
+
+// Função auxiliar para converter números do formato brasileiro (vírgula) para JavaScript (ponto)
+const parseNumberBR = (value) => {
+  if (value === undefined || value === null || value === '') return 0;
+  
+  // Se já é número, retornar diretamente
+  if (typeof value === 'number') return value;
+  
+  // Converter para string
+  const str = String(value).trim();
+  
+  // Se está vazio, retornar 0
+  if (str === '') return 0;
+  
+  // Remover espaços e caracteres não numéricos exceto vírgula, ponto e sinal negativo
+  let cleaned = str.replace(/[^\d,.-]/g, '');
+  
+  // Detectar formato: se tem vírgula E ponto, determinar qual é decimal
+  if (cleaned.includes(',') && cleaned.includes('.')) {
+    // Se vírgula vem depois do ponto: formato brasileiro (1.234,56)
+    if (cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')) {
+      cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+    } else {
+      // Se ponto vem depois da vírgula: formato inglês (1,234.56)
+      cleaned = cleaned.replace(/,/g, '');
+    }
+  } else if (cleaned.includes(',')) {
+    // Apenas vírgula: pode ser decimal brasileiro ou separador de milhar
+    // Se tem apenas uma vírgula e vem nos últimos 3 caracteres, é decimal
+    const commaIndex = cleaned.indexOf(',');
+    const afterComma = cleaned.substring(commaIndex + 1);
+    if (afterComma.length <= 3 && !cleaned.includes(',', commaIndex + 1)) {
+      // É decimal brasileiro
+      cleaned = cleaned.replace(',', '.');
+    } else {
+      // É separador de milhar, remover
+      cleaned = cleaned.replace(/,/g, '');
+    }
+  }
+  
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
+// ========== FIM DAS FUNÇÕES AUXILIARES ==========
+
 // Componente do Modal para Adicionar/Editar Indicador
 const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
   const formatDatasetsForForm = (list) => {
@@ -343,24 +433,14 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
         // Ler aba de Dados
         const dataSheet = wb.Sheets['Dados'];
         
-        // Extrair labels do cabeçalho preservando formatação original
-        const range = XLSX.utils.decode_range(dataSheet['!ref']);
-        const parsedLabels = [];
+        // Processar labels (com conversão automática de datas)
+        const { originalLabels } = processExcelLabels(dataSheet);
         
-        for (let col = range.s.c; col <= range.e.c; col++) {
-          const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-          const cell = dataSheet[cellAddress];
-          
-          if (cell && cell.v !== undefined) {
-            const headerValue = String(cell.v);
-            // Pular colunas de ID e Dataset
-            if (headerValue !== 'ID_Gráfico' && headerValue !== 'ID_Grafico' && 
-                headerValue !== 'id' && headerValue !== 'Dataset' && headerValue !== 'dataset') {
-              // Se a célula tem formato de texto (w), usar ele; senão usar o valor (v)
-              parsedLabels.push(cell.w || headerValue);
-            }
-          }
-        }
+        // Filtrar labels (remover colunas ID_Gráfico e Dataset)
+        const parsedLabels = originalLabels.filter(label => 
+          label !== 'ID_Gráfico' && label !== 'ID_Grafico' && 
+          label !== 'id' && label !== 'Dataset' && label !== 'dataset'
+        );
         
         console.log('🏷️ [FORMULÁRIO] Labels extraídos do cabeçalho:', parsedLabels);
         
@@ -382,7 +462,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
           const datasetName = row['Dataset'] || row['dataset'] || 'Série 1';
           const values = parsedLabels.map(label => {
             const val = row[label];
-            return val !== undefined && val !== null && val !== '' ? parseFloat(val) : 0;
+            return parseNumberBR(val);
           });
 
           return {
@@ -403,7 +483,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
             const datasetName = row['Dataset'] || row['dataset'];
             const color = row['Cor'] || row['cor'] || row['color'];
             const labelName = row['Rótulo'] || row['Rotulo'] || row['rotulo'] || row['label'];
-            const chartType = row['Tipo'] || row['tipo'] || row['type']; // Para gráficos combo
+            const chartType = row['Tipo'] || row['tipo'] || row['type'];
 
             const dataset = parsedDatasets.find(ds => ds.name === datasetName);
             if (dataset) {
@@ -428,11 +508,37 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
                 }
               }
               
-              // Para gráficos combo: definir tipo de renderização (bar/line)
-              if (importedChart === 'combo' && chartType) {
-                const normalizedType = chartType.toLowerCase().trim();
-                dataset.chartType = normalizedType === 'line' || normalizedType === 'linha' ? 'line' : 'bar';
-                console.log(`📊 [FORMULÁRIO] Tipo "${dataset.chartType}" aplicado ao dataset "${datasetName}"`);
+              // Para gráficos combo: processar tipo, eixo Y e formato
+              if (importedChart === 'combo') {
+                // Tipo de renderização (bar/line)
+                if (chartType) {
+                  const normalizedType = chartType.toLowerCase().trim();
+                  dataset.chartType = normalizedType === 'line' || normalizedType === 'linha' ? 'line' : 'bar';
+                  console.log(`📊 [FORMULÁRIO] Tipo "${dataset.chartType}" aplicado ao dataset "${datasetName}"`);
+                }
+                
+                // Eixo Y
+                const yAxisId = row['Eixo Y'] || row['eixo_y'] || row['yAxisId'];
+                if (yAxisId) {
+                  dataset.yAxisId = yAxisId.toLowerCase().includes('direito') || yAxisId.toLowerCase().includes('right') ? 'right' : 'left';
+                  console.log(`📊 [FORMULÁRIO] Eixo Y "${dataset.yAxisId}" aplicado ao dataset "${datasetName}"`);
+                }
+                
+                // Formato por dataset
+                const formato = row['Formato'] || row['formato'] || row['format'];
+                if (formato) {
+                  const formatoLower = String(formato).toLowerCase().trim();
+                  if (formatoLower.includes('usd') || formatoLower.includes('dólar') || formatoLower.includes('dolar')) {
+                    dataset.valueFormat = 'currency-usd';
+                  } else if (formatoLower === 'currency' || formatoLower.includes('brl') || formatoLower.includes('r$') || formatoLower.includes('monetário') || formatoLower.includes('monetario')) {
+                    dataset.valueFormat = 'currency';
+                  } else if (formatoLower === 'percentage' || formatoLower.includes('percent') || formatoLower.includes('%')) {
+                    dataset.valueFormat = 'percentage';
+                  } else if (formatoLower === 'number' || formatoLower.includes('numérico') || formatoLower.includes('numerico')) {
+                    dataset.valueFormat = 'number';
+                  }
+                  console.log(`📊 [FORMULÁRIO] Formato "${dataset.valueFormat}" aplicado ao dataset "${datasetName}"`);
+                }
               }
             }
           });
@@ -1810,12 +1916,13 @@ export function ProjectDetails() {
     
     // Atualizar ordem no backend em segundo plano
     try {
-      // Atualizar cada indicador com sua nova ordem (enviar apenas o campo order)
+      // Atualizar cada indicador com sua nova ordem (enviar apenas o campo display_order)
       for (let i = 0; i < indicators.length; i++) {
-        await updateProjectIndicator(project.id, indicators[i].id, { order: i });
+        await updateProjectIndicator(project.id, indicators[i].id, { display_order: i });
       }
+      console.log('✅ Ordem dos indicadores salva no Supabase');
     } catch (error) {
-      console.error('Erro ao reordenar indicadores:', error);
+      console.error('❌ Erro ao reordenar indicadores:', error);
       // Reverter mudança local em caso de erro
       updateProject(project.id, { project_indicators: project.project_indicators });
       alert('Erro ao salvar reordenação. Tente novamente.');
@@ -1862,7 +1969,7 @@ export function ProjectDetails() {
         'Tipo': indicator.chart_type || 'bar',
         'Formato': indicator.options?.valueFormat || 'number',
         'Tamanho': indicator.size === 'large' ? '2 colunas' : '1 coluna',
-        'Ordem': indicator.order !== undefined ? indicator.order : index
+        'Ordem': indicator.display_order !== undefined ? indicator.display_order : index
       }));
 
       const wsConfig = XLSX.utils.json_to_sheet(configData);
@@ -1908,7 +2015,13 @@ export function ProjectDetails() {
           const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
           const cell = wsData[cellAddress];
           if (cell && typeof cell.v === 'number') {
-            cell.z = '#.##0,00'; // Formato brasileiro: vírgula para decimal, ponto para milhar
+            // Formato brasileiro: vírgula para decimal
+            cell.z = '0.00';
+            // Converter o valor para string formatada em pt-BR
+            cell.w = new Intl.NumberFormat('pt-BR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(cell.v);
           }
         }
       }
@@ -2001,6 +2114,23 @@ export function ProjectDetails() {
 
       if (axisRows.length > 0) {
         const wsAxis = XLSX.utils.json_to_sheet(axisRows);
+        
+        // Formatar células numéricas da aba Eixos com padrão brasileiro
+        const axisRange = XLSX.utils.decode_range(wsAxis['!ref']);
+        for (let R = axisRange.s.r + 1; R <= axisRange.e.r; ++R) {
+          for (let C = 3; C <= 4; ++C) { // Colunas Mínimo e Máximo
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = wsAxis[cellAddress];
+            if (cell && typeof cell.v === 'number') {
+              cell.z = '0.00';
+              cell.w = new Intl.NumberFormat('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              }).format(cell.v);
+            }
+          }
+        }
+        
         wsAxis['!cols'] = [
           { wch: 12 }, // ID_Gráfico
           { wch: 12 }, // Eixo
@@ -2040,7 +2170,7 @@ export function ProjectDetails() {
         'Tipo': indicator.chart_type || 'bar',
         'Formato': indicator.options?.valueFormat || 'number',
         'Tamanho': indicator.size === 'large' ? '2 colunas' : '1 coluna',
-        'Ordem': indicator.order !== undefined ? indicator.order : indicatorIndex
+        'Ordem': indicator.display_order !== undefined ? indicator.display_order : indicatorIndex
       }];
 
       const wsConfig = XLSX.utils.json_to_sheet(configData);
@@ -2084,7 +2214,13 @@ export function ProjectDetails() {
           const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
           const cell = wsData[cellAddress];
           if (cell && typeof cell.v === 'number') {
-            cell.z = '#.##0,00'; // Formato brasileiro: vírgula para decimal, ponto para milhar
+            // Formato brasileiro: vírgula para decimal
+            cell.z = '0.00';
+            // Converter o valor para string formatada em pt-BR
+            cell.w = new Intl.NumberFormat('pt-BR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(cell.v);
           }
         }
       }
@@ -2166,6 +2302,23 @@ export function ProjectDetails() {
         });
 
         const wsAxis = XLSX.utils.json_to_sheet(axisRows);
+        
+        // Formatar células numéricas da aba Eixos com padrão brasileiro
+        const axisRange = XLSX.utils.decode_range(wsAxis['!ref']);
+        for (let R = axisRange.s.r + 1; R <= axisRange.e.r; ++R) {
+          for (let C = 2; C <= 3; ++C) { // Colunas Mínimo e Máximo
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = wsAxis[cellAddress];
+            if (cell && typeof cell.v === 'number') {
+              cell.z = '0.00';
+              cell.w = new Intl.NumberFormat('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              }).format(cell.v);
+            }
+          }
+        }
+        
         wsAxis['!cols'] = [
           { wch: 12 }, // ID_Gráfico
           { wch: 12 }, // Eixo
@@ -2911,24 +3064,8 @@ export function ProjectDetails() {
       // Ler aba de Dados preservando formatação original dos labels
       const dataSheet = wb.Sheets['Dados'];
       
-      // Extrair labels do cabeçalho preservando formatação original
-      const dataRange = XLSX.utils.decode_range(dataSheet['!ref']);
-      const originalLabels = [];
-      const labelMapping = {}; // Mapear label original para label convertido
-      
-      for (let col = dataRange.s.c; col <= dataRange.e.c; col++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-        const cell = dataSheet[cellAddress];
-        
-        if (cell && cell.v !== undefined) {
-          const headerValue = String(cell.v);
-          // Se a célula tem formato de texto (w), usar ele; senão usar o valor (v)
-          const formattedLabel = cell.w || headerValue;
-          originalLabels.push(formattedLabel);
-          labelMapping[formattedLabel] = headerValue;
-        }
-      }
-      
+      // Processar labels (com conversão automática de datas)
+      const { originalLabels, labelMapping } = processExcelLabels(dataSheet);
       console.log('🏷️ Labels originais do cabeçalho:', originalLabels);
       
       const dataData = XLSX.utils.sheet_to_json(dataSheet, { 
@@ -2992,7 +3129,7 @@ export function ProjectDetails() {
           chart_type: chartType,
           valueFormat,
           size,
-          order: order !== undefined ? parseInt(order) : undefined,
+          display_order: order !== undefined ? parseInt(order) : undefined,
           labels: [],
           datasets: []
         };
@@ -3038,7 +3175,7 @@ export function ProjectDetails() {
         // Extrair valores usando os labels originais
         const values = labels.map(label => {
           const val = row[label];
-          const parsed = val !== undefined && val !== null && val !== '' ? parseFloat(val) : 0;
+          const parsed = parseNumberBR(val);
           console.log(`   "${label}": ${val} → ${parsed}`);
           return parsed;
         });
@@ -3218,12 +3355,12 @@ export function ProjectDetails() {
           }
           
           if (minimo !== undefined && minimo !== null && minimo !== '') {
-            graph.axisConfig[axisKey].min = parseFloat(minimo);
+            graph.axisConfig[axisKey].min = parseNumberBR(minimo);
             console.log(`   ✅ ${axisKey} mínimo definido: ${graph.axisConfig[axisKey].min}`);
           }
           
           if (maximo !== undefined && maximo !== null && maximo !== '') {
-            graph.axisConfig[axisKey].max = parseFloat(maximo);
+            graph.axisConfig[axisKey].max = parseNumberBR(maximo);
             console.log(`   ✅ ${axisKey} máximo definido: ${graph.axisConfig[axisKey].max}`);
           }
         });
@@ -3274,7 +3411,7 @@ export function ProjectDetails() {
             labels: graph.labels,
             datasets: graph.datasets,
             size: graph.size || 'normal',
-            order: graph.order,
+            display_order: graph.display_order,
             options
           };
           console.log('✨ Indicador mapeado:', indicator);
@@ -3282,8 +3419,8 @@ export function ProjectDetails() {
         })
         .sort((a, b) => {
           // Ordenar por ordem se disponível
-          if (a.order !== undefined && b.order !== undefined) {
-            return a.order - b.order;
+          if (a.display_order !== undefined && b.display_order !== undefined) {
+            return a.display_order - b.display_order;
           }
           return 0;
         });
@@ -3388,7 +3525,7 @@ export function ProjectDetails() {
             
             datasets = datasetParts.map((part, index) => {
               const [name, valuesStr] = part.split(': ');
-              const values = valuesStr ? valuesStr.split(',').map(v => parseFloat(v.trim()) || 0) : [];
+              const values = valuesStr ? valuesStr.split(',').map(v => parseNumberBR(v.trim())) : [];
               return {
                 name: name?.trim() || `Série ${index + 1}`,
                 values,
@@ -3447,10 +3584,16 @@ export function ProjectDetails() {
     console.log('📋 Carregando modelo:', filename);
     
     try {
-      // Carregar arquivo do modelo
-      const response = await fetch(`/modelo_indicadores/${filename}`);
+      // Carregar arquivo do modelo do Supabase Storage
+      const SUPABASE_URL = 'https://lrnpdyqcxstghzrujywf.supabase.co';
+      const BUCKET_NAME = 'indicator-templates';
+      const templateUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${filename}`;
+      
+      console.log('🔗 URL do modelo:', templateUrl);
+      
+      const response = await fetch(templateUrl);
       if (!response.ok) {
-        throw new Error('Erro ao carregar modelo');
+        throw new Error(`Erro ao carregar modelo: ${response.status} ${response.statusText}`);
       }
       
       const arrayBuffer = await response.arrayBuffer();
@@ -3482,26 +3625,15 @@ export function ProjectDetails() {
       
       // Processar dados do modelo
       const dataSheet = wb.Sheets['Dados'];
-      const dataRange = XLSX.utils.decode_range(dataSheet['!ref']);
-      const parsedLabels = [];
-      const labelMapping = {}; // Mapear label formatado para label do Excel
       
-      for (let col = dataRange.s.c; col <= dataRange.e.c; col++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-        const cell = dataSheet[cellAddress];
-        
-        if (cell && cell.v !== undefined) {
-          const headerValue = String(cell.v);
-          if (headerValue !== 'ID_Gráfico' && headerValue !== 'ID_Grafico' && 
-              headerValue !== 'id' && headerValue !== 'Dataset' && headerValue !== 'dataset') {
-            // Usar formato visual (w) se disponível, senão usar valor
-            const formattedLabel = cell.w || headerValue;
-            parsedLabels.push(formattedLabel);
-            // Mapear label formatado para o que o Excel usa no JSON
-            labelMapping[formattedLabel] = headerValue;
-          }
-        }
-      }
+      // Processar labels (com conversão automática de datas)
+      const { originalLabels, labelMapping } = processExcelLabels(dataSheet);
+      
+      // Filtrar labels (remover colunas ID_Gráfico e Dataset)
+      const parsedLabels = originalLabels.filter(label => 
+        label !== 'ID_Gráfico' && label !== 'ID_Grafico' && 
+        label !== 'id' && label !== 'Dataset' && label !== 'dataset'
+      );
       
       console.log('🏷️ [MODELO] Labels preservados:', parsedLabels);
       console.log('🗺️ [MODELO] Mapeamento:', labelMapping);
@@ -3524,18 +3656,8 @@ export function ProjectDetails() {
             val = row[labelMapping[label]];
           }
           
-          // Processar valor: pode ser número, string numérica ou string formatada como moeda
-          let parsed = 0;
-          if (val !== undefined && val !== null && val !== '') {
-            if (typeof val === 'number') {
-              parsed = val;
-            } else if (typeof val === 'string') {
-              // Remover formatação de moeda (R$, $, pontos, vírgulas) e converter
-              const cleanValue = val.replace(/[R$\s.]/g, '').replace(',', '.');
-              parsed = parseFloat(cleanValue) || 0;
-            }
-          }
-          
+          // Usar parseNumberBR para processar valores
+          const parsed = parseNumberBR(val);
           console.log(`   [MODELO] "${label}": ${val} (${typeof val}) → ${parsed}`);
           return parsed;
         });
@@ -3580,9 +3702,37 @@ export function ProjectDetails() {
               dataset.color = color;
             }
             
-            if (importedChart === 'combo' && chartType) {
-              const normalizedType = chartType.toLowerCase().trim();
-              dataset.chartType = normalizedType === 'line' || normalizedType === 'linha' ? 'line' : 'bar';
+            // Para gráficos combo: processar tipo, eixo Y e formato
+            if (importedChart === 'combo') {
+              // Tipo de renderização (bar/line)
+              if (chartType) {
+                const normalizedType = chartType.toLowerCase().trim();
+                dataset.chartType = normalizedType === 'line' || normalizedType === 'linha' ? 'line' : 'bar';
+                console.log(`   [MODELO] Tipo "${dataset.chartType}" aplicado ao dataset "${datasetName}"`);
+              }
+              
+              // Eixo Y
+              const yAxisId = row['Eixo Y'] || row['eixo_y'] || row['yAxisId'];
+              if (yAxisId) {
+                dataset.yAxisId = yAxisId.toLowerCase().includes('direito') || yAxisId.toLowerCase().includes('right') ? 'right' : 'left';
+                console.log(`   [MODELO] Eixo Y "${dataset.yAxisId}" aplicado ao dataset "${datasetName}"`);
+              }
+              
+              // Formato por dataset
+              const formato = row['Formato'] || row['formato'] || row['format'];
+              if (formato) {
+                const formatoLower = String(formato).toLowerCase().trim();
+                if (formatoLower.includes('usd') || formatoLower.includes('dólar') || formatoLower.includes('dolar')) {
+                  dataset.valueFormat = 'currency-usd';
+                } else if (formatoLower === 'currency' || formatoLower.includes('brl') || formatoLower.includes('r$') || formatoLower.includes('monetário') || formatoLower.includes('monetario')) {
+                  dataset.valueFormat = 'currency';
+                } else if (formatoLower === 'percentage' || formatoLower.includes('percent') || formatoLower.includes('%')) {
+                  dataset.valueFormat = 'percentage';
+                } else if (formatoLower === 'number' || formatoLower.includes('numérico') || formatoLower.includes('numerico')) {
+                  dataset.valueFormat = 'number';
+                }
+                console.log(`   [MODELO] Formato "${dataset.valueFormat}" aplicado ao dataset "${datasetName}"`);
+              }
             }
           }
         });

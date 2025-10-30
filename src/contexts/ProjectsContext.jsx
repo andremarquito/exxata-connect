@@ -621,6 +621,46 @@ export function ProjectsProvider({ children }) {
         supabaseData.ai_predictive_text = patch.aiPredictiveText;
       }
 
+      if (patch.name !== undefined) {
+        supabaseData.name = patch.name;
+      }
+
+      if (patch.client !== undefined) {
+        supabaseData.client = patch.client;
+      }
+
+      if (patch.contractValue !== undefined) {
+        supabaseData.contract_value = patch.contractValue;
+      }
+
+      if (patch.measuredValue !== undefined) {
+        supabaseData.measured_value = patch.measuredValue;
+      }
+
+      if (patch.executionStartDate !== undefined) {
+        supabaseData.execution_start_date = patch.executionStartDate;
+      }
+
+      if (patch.executionEndDate !== undefined) {
+        supabaseData.execution_end_date = patch.executionEndDate;
+      }
+
+      if (patch.contractSignatureDate !== undefined) {
+        supabaseData.contract_signature_date = patch.contractSignatureDate;
+      }
+
+      if (patch.osSignatureDate !== undefined) {
+        supabaseData.os_signature_date = patch.osSignatureDate;
+      }
+
+      if (patch.reportCutoffDate !== undefined) {
+        supabaseData.report_cutoff_date = patch.reportCutoffDate;
+      }
+
+      if (patch.exxataActivities !== undefined) {
+        supabaseData.exxata_activities = patch.exxataActivities;
+      }
+
       // Adicionar timestamp de atualização e usuário
       supabaseData.updated_at = new Date().toISOString();
       if (user?.id) {

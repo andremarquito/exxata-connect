@@ -1,6 +1,6 @@
 import XLSX from 'xlsx';
 
-const filePath = 'modelo_indicadores/Comparativo_de_Faturamento_Acumulado_2025-10-29 (1).xlsx';
+const filePath = 'modelo_indicadores/g5_comparativo_mod_mes_combo.xlsx';
 
 console.log('📖 Lendo arquivo:', filePath);
 
