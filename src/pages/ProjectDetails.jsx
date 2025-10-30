@@ -1401,8 +1401,7 @@ export function ProjectDetails() {
       
       const next = [...list];
       const [moved] = next.splice(fromIdx, 1);
-      const insertIdx = fromIdx < toIdx ? toIdx : toIdx;
-      next.splice(insertIdx, 0, moved);
+      next.splice(toIdx, 0, moved);
       
       // Atualizar ordem no Supabase
       const newOrder = next.map(c => c.id);
@@ -1413,6 +1412,10 @@ export function ProjectDetails() {
       console.error('Erro ao reordenar condutas:', error);
       setDragOverConductId(null);
     }
+  };
+
+  const onDragEndConduct = () => {
+    setDragOverConductId(null);
   };
 
   // Exportar condutas para Excel
@@ -5178,6 +5181,7 @@ export function ProjectDetails() {
                           onDragStart={(e) => onDragStartConduct(e, c.id)}
                           onDragOver={onDragOverConduct}
                           onDrop={(e) => onDropConduct(e, c.id)}
+                          onDragEnd={onDragEndConduct}
                           onDragEnter={() => setDragOverConductId(c.id)}
                           onDragLeave={() => setDragOverConductId(null)}
                         >

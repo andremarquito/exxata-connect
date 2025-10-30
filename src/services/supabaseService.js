@@ -889,16 +889,16 @@ export const conductService = {
   // Reordenar condutas
   async reorderConducts(projectId, newOrder) {
     try {
-      const updates = newOrder.map((conductId, index) => ({
-        id: conductId,
-        display_order: index
-      }));
+      // Atualizar display_order de cada conduta individualmente
+      for (let i = 0; i < newOrder.length; i++) {
+        const { error } = await supabase
+          .from('project_conducts')
+          .update({ display_order: i })
+          .eq('id', newOrder[i]);
 
-      const { error } = await supabase
-        .from('project_conducts')
-        .upsert(updates);
+        if (error) throw error;
+      }
 
-      if (error) throw error;
       return { success: true };
     } catch (error) {
       console.error('Erro ao reordenar condutas:', error);
