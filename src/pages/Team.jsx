@@ -60,7 +60,7 @@ export function Team() {
       const exportData = [];
 
       // Cabeçalho com informações da exportação
-      exportData.push(['DADOS DA EQUIPE EXXATA CONNECT', '']);
+      exportData.push(['DADOS DA EQUIPE EXXATA CONTROL', '']);
       exportData.push(['Data de Exportação', new Date().toLocaleDateString('pt-BR')]);
       exportData.push(['Hora de Exportação', new Date().toLocaleTimeString('pt-BR')]);
       exportData.push(['Exportado por', user?.name || user?.email || 'Usuário']);
@@ -146,7 +146,7 @@ export function Team() {
       XLSX.utils.book_append_sheet(wb, ws, 'Equipe');
 
       // Gerar nome do arquivo
-      const fileName = `Equipe_Exxata_Connect_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const fileName = `Equipe_Exxata_Control_${new Date().toISOString().split('T')[0]}.xlsx`;
 
       // Fazer download do arquivo
       XLSX.writeFile(wb, fileName);

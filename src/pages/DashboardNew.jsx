@@ -300,7 +300,7 @@ export function Dashboard() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              Exxata <span className="text-exxata-red">Connect</span>
+              Exxata <span className="text-exxata-red">Control</span>
             </h1>
             <p className="text-xl md:text-2xl mb-2 text-slate-200">
               Gestão Inteligente de Projetos da Exxata

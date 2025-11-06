@@ -20,14 +20,14 @@ const PrivacyPolicy = () => {
           <CardHeader className="space-y-3 pb-6">
             <div className="flex justify-center mb-2">
               <div className="text-2xl font-bold text-exxata-blue">
-                Exxata <span className="text-exxata-red">Connect</span>
+                Exxata <span className="text-exxata-red">Control</span>
               </div>
             </div>
             <CardTitle className="text-3xl text-center font-bold text-gray-900">
               Política de Privacidade
             </CardTitle>
             <CardDescription className="text-center text-base">
-              Informações sobre coleta, uso, armazenamento e proteção de dados na plataforma Exxata Connect
+              Informações sobre coleta, uso, armazenamento e proteção de dados na plataforma Exxata Control
             </CardDescription>
           </CardHeader>
 
@@ -40,7 +40,7 @@ const PrivacyPolicy = () => {
               <p className="text-justify">
                 A Exxata valoriza a ética, a integridade e a conformidade legal em todas as suas atividades de negócio. 
                 Esta Política de Privacidade tem por finalidade demonstrar o nosso compromisso com a transparência na forma 
-                como tratamos os dados pessoais de usuários da plataforma Exxata Connect, bem como expressar nosso 
+                como tratamos os dados pessoais de usuários da plataforma Exxata Control, bem como expressar nosso 
                 comprometimento com a segurança das informações fornecidas. Também buscamos assegurar a conformidade com a 
                 Lei Geral de Proteção de Dados (Lei nº 13.709/2018 - LGPD) e demais legislações aplicáveis, protegendo os 
                 direitos de privacidade dos titulares dos dados.
@@ -53,10 +53,10 @@ const PrivacyPolicy = () => {
                 Abrangência
               </h2>
               <p className="text-justify">
-                Esta política se aplica ao uso da plataforma Exxata Connect e a todas as operações de tratamento de dados pessoais 
+                Esta política se aplica ao uso da plataforma Exxata Control e a todas as operações de tratamento de dados pessoais 
                 realizadas pela Exxata no contexto da plataforma. Abrange os dados coletados de usuários (representantes de empresas 
-                clientes) ao se cadastrarem e utilizarem os serviços da Exxata Connect, bem como de outros titulares que eventualmente 
-                a Exxata Connect precise coletar dados para cumprir as finalidades, sobretudo de cumprimento de contrato. Por isso mesmo, 
+                clientes) ao se cadastrarem e utilizarem os serviços da Exxata Control, bem como de outros titulares que eventualmente 
+                a Exxata Control precise coletar dados para cumprir as finalidades, sobretudo de cumprimento de contrato. Por isso mesmo, 
                 todos os colaboradores, parceiros e fornecedores que possam ter acesso a esses dados pessoais em nome da Exxata estão 
                 sujeitos a esta política e às leis de proteção de dados vigentes.
               </p>
@@ -69,7 +69,7 @@ const PrivacyPolicy = () => {
               </h2>
               <p className="text-justify mb-4">
                 Coletamos apenas os dados pessoais necessários para oferecer, executar e aprimorar os serviços da plataforma Exxata 
-                Connect, respeitando os princípios de necessidade e adequação previstos na LGPD. Ao utilizar a plataforma, 
+                Control, respeitando os princípios de necessidade e adequação previstos na LGPD. Ao utilizar a plataforma, 
                 você nos fornece diretamente algumas informações pessoais por meio de formulários de cadastro ou atualizações 
                 de perfil. Esses dados incluem:
               </p>
@@ -93,12 +93,12 @@ const PrivacyPolicy = () => {
               </ul>
               <p className="text-justify mt-4">
                 <strong>Finalidades:</strong> Os dados acima são tratados estritamente para permitir o acesso seguro à plataforma, viabilizar as 
-                funcionalidades de gerenciamento de projetos no Exxata Connect, manter contato com os usuários sobre assuntos relacionados ao 
-                serviço e executar os contratos relacionados ao Exxata Connect e o titular de dados. Em suma, usamos os dados pessoais para: 
+                funcionalidades de gerenciamento de projetos no Exxata Control, manter contato com os usuários sobre assuntos relacionados ao 
+                serviço e executar os contratos relacionados ao Exxata Control e o titular de dados. Em suma, usamos os dados pessoais para: 
                 (a) criar e gerenciar sua conta de usuário; (b) identificar adequadamente os participantes dos projetos dentro da plataforma; 
                 (c) fornecer suporte e orientação quando solicitado; (d) enviar informações ou avisos relacionados ao uso da plataforma; 
-                (e) executar eventuais contratos relacionados ao titular de dados e a Exxata Connect; (f) auxiliar o titular em relação ao 
-                exercício regular de seus direitos; e (g) beneficiá-lo mediante otimização e eficácia dos serviços prestados pela Exxata Connect.
+                (e) executar eventuais contratos relacionados ao titular de dados e a Exxata Control; (f) auxiliar o titular em relação ao 
+                exercício regular de seus direitos; e (g) beneficiá-lo mediante otimização e eficácia dos serviços prestados pela Exxata Control.
               </p>
               <p className="text-justify mt-3 text-sm italic text-gray-600">
                 Vale ressaltar que não coletamos dados pessoais sensíveis (conforme definidos no art. 5º, inciso II, da LGPD, ex: origem étnica, 
@@ -113,12 +113,12 @@ const PrivacyPolicy = () => {
                 Base Legal para Tratamento de Dados
               </h2>
               <p className="text-justify">
-                A Exxata trata os dados pessoais dos usuários da plataforma Exxata Connect com bases legais permitidas na LGPD. Em geral, o 
+                A Exxata trata os dados pessoais dos usuários da plataforma Exxata Control com bases legais permitidas na LGPD. Em geral, o 
                 tratamento de nome, e-mail, telefone e empresa se dá para a execução de contrato ou de procedimentos preliminares relacionados 
                 a contrato do qual o usuário (ou a empresa que ele representa) é parte (art. 7º, V da LGPD). Adicionalmente, determinados 
                 tratamentos podem se basear no legítimo interesse da Exxata (art. 7º, IX da LGPD), por exemplo, para manter a segurança da 
                 plataforma e prevenir fraudes, sempre respeitando os direitos e liberdades fundamentais dos titulares. Não obstante, é feito 
-                também com base no cumprimento de obrigação legal ou regulatória pela Exxata Connect (art. 7º, II, LGPD).
+                também com base no cumprimento de obrigação legal ou regulatória pela Exxata Control (art. 7º, II, LGPD).
               </p>
             </section>
 
@@ -151,12 +151,12 @@ const PrivacyPolicy = () => {
               </h2>
               <p className="text-justify mb-3">
                 A Exxata adota medidas rigorosas de segurança para proteger os dados pessoais sob sua guarda, em linha com as 
-                melhores práticas de mercado e requisitos legais. Os dados dos usuários do Exxata Connect são armazenados em 
+                melhores práticas de mercado e requisitos legais. Os dados dos usuários do Exxata Control são armazenados em 
                 bancos de dados na nuvem (via Supabase) em ambiente seguro, com controles de acesso, criptografia e políticas de segurança.
               </p>
               <p className="text-justify">
                 Implementamos controles de autenticação e autorização robustos na plataforma: cada usuário possui credenciais 
-                individuais e apenas pode acessar os dados a que está autorizado. A arquitetura do Exxata Connect conta com 
+                individuais e apenas pode acessar os dados a que está autorizado. A arquitetura do Exxata Control conta com 
                 regras de segurança em nível de linha (Row Level Security) e outras proteções de software para garantir que um 
                 cliente não tenha acesso indevido a informações de outro.
               </p>
@@ -220,7 +220,7 @@ const PrivacyPolicy = () => {
                 Transferência Internacional de Dados
               </h2>
               <p className="text-justify">
-                Como a infraestrutura de tecnologia da informação da Exxata Connect utiliza serviços de nuvem, é possível que os dados pessoais 
+                Como a infraestrutura de tecnologia da informação da Exxata Control utiliza serviços de nuvem, é possível que os dados pessoais 
                 coletados sejam armazenados ou processados fora do Brasil, incluindo em datacenters localizados nos Estados Unidos ou em outros 
                 países. As transferências internacionais de dados serão sempre feitas em conformidade com a LGPD e demais regulamentações, 
                 assegurando que os fornecedores envolvidos adotem padrões rigorosos de proteção de dados, no mesmo nível exigido pela LGPD.
@@ -250,7 +250,7 @@ const PrivacyPolicy = () => {
                 Atualizações desta Política
               </h2>
               <p className="text-justify mb-4">
-                À medida que a Exxata Connect evoluir ou que novas diretrizes legais de privacidade entrem em vigor, poderemos 
+                À medida que a Exxata Control evoluir ou que novas diretrizes legais de privacidade entrem em vigor, poderemos 
                 atualizar esta Política de Privacidade para refletir essas mudanças. Sempre que alguma alteração relevante for 
                 realizada, iremos publicar a versão atualizada neste mesmo endereço eletrônico, acompanhada da data de revisão, 
                 e comunicaremos os usuários por meio dos canais de contato disponíveis.

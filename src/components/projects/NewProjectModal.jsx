@@ -75,7 +75,7 @@ export function NewProjectModal({ isOpen, onClose, onCreate }) {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Novo Projeto</CardTitle>
-              <CardDescription>Cadastre um novo projeto para gestão no Exxata Connect.</CardDescription>
+              <CardDescription>Cadastre um novo projeto para gestão no Exxata Control.</CardDescription>
             </div>
             <Button
               variant="ghost"

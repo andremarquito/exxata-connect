@@ -142,7 +142,7 @@ export function ResetPassword() {
         <CardHeader className="space-y-1">
           <div className="flex justify-center mb-4">
             <div className="text-2xl font-bold text-exxata-blue">
-              Exxata <span className="text-exxata-red">Connect</span>
+              Exxata <span className="text-exxata-red">Control</span>
             </div>
           </div>
           <CardTitle className="text-2xl text-center">

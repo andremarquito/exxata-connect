@@ -72,7 +72,7 @@ const ConfirmEmail = () => {
                 </p>
                 <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
                   <li>Abra sua caixa de entrada</li>
-                  <li>Procure por um e-mail do Exxata Connect</li>
+                  <li>Procure por um e-mail do Exxata Control</li>
                   <li>Clique no link de confirmação</li>
                   <li>Faça login na plataforma</li>
                 </ol>

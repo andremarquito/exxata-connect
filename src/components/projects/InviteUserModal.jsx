@@ -215,7 +215,7 @@ export function InviteUserModal({ isOpen, onClose, currentUserRole }) {
         <CardHeader>
           <CardTitle>Convidar Colaborador</CardTitle>
           <CardDescription>
-            Convide um colaborador para acessar a plataforma Exxata Connect. Após o convite, ele poderá ser incluído em qualquer projeto.
+            Convide um colaborador para acessar a plataforma Exxata Control. Após o convite, ele poderá ser incluído em qualquer projeto.
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleInvite}>
