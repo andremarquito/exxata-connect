@@ -12,7 +12,7 @@ import {
   BarChart3, Clock, CheckCircle, AlertCircle, TrendingUp, Brain, 
   Download, Upload, Search, Zap, Target, Shield, ArrowLeft, Settings, UserPlus, FilePlus2,
   Image, File, Table, Trash2, PieChart, LineChart, Plus, Edit3, Palette, X, GripVertical, Copy, Camera,
-  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown, Eye, Maximize2, Minimize2
+  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown, Eye, Maximize2, Minimize2, Clipboard
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjects } from '@/contexts/ProjectsContext';
@@ -21,6 +21,7 @@ import { useState, useEffect, useRef } from 'react';
 import OverviewGrid from '@/components/projects/OverviewGridSimple';
 import IndicatorsTab from '@/components/projects/IndicatorsTab';
 import IndicatorTemplateSelector from '@/components/projects/IndicatorTemplateSelector';
+import OnboardingTab from '@/components/projects/OnboardingTab';
 import * as XLSX from 'xlsx';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -3975,6 +3976,7 @@ export function ProjectDetails() {
           <TabsList>
             <TabsTrigger value="preliminary">Menu</TabsTrigger>
             <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+            <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
             <TabsTrigger value="documents">Documentos</TabsTrigger>
             <TabsTrigger value="team">Equipe</TabsTrigger>
             <TabsTrigger value="activities">Atividades</TabsTrigger>
@@ -4002,6 +4004,7 @@ export function ProjectDetails() {
           <div className="grid gap-4 md:grid-cols-3">
             {[ 
               { key: 'overview', title: 'Visão Geral', desc: 'Resumo do projeto com dados principais.', icon: <TrendingUp className="h-5 w-5 text-exxata-red" /> },
+              { key: 'onboarding', title: 'Onboarding', desc: 'Documentação necessária para o projeto.', icon: <Clipboard className="h-5 w-5 text-exxata-red" /> },
               { key: 'documents', title: 'Documentos', desc: 'Arquivos do cliente e da Exxata.', icon: <FileText className="h-5 w-5 text-exxata-red" /> },
               { key: 'team', title: 'Equipe', desc: 'Membros e permissões do projeto.', icon: <Users className="h-5 w-5 text-exxata-red" /> },
               { key: 'activities', title: 'Atividades', desc: 'Planejamento e andamento das atividades.', icon: <Clock className="h-5 w-5 text-exxata-red" /> },
@@ -4031,6 +4034,15 @@ export function ProjectDetails() {
             updateProject={updateProject}
             updateProjectBackend={updateProjectBackend}
             teamMembers={loadedProjectMembers.length > 0 ? loadedProjectMembers : projectMembers}
+          />
+        </TabsContent>
+
+        {/* ONBOARDING */}
+        <TabsContent value="onboarding" className="space-y-4 pl-4 pb-8">
+          <OnboardingTab 
+            projectId={project?.id} 
+            userId={user?.id} 
+            canEdit={canEdit && !viewAsClient}
           />
         </TabsContent>
 

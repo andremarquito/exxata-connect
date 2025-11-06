@@ -45,7 +45,7 @@ export function Sidebar() {
       <div className="flex items-center justify-between h-16 border-b border-slate-200 px-6">
         {!isCollapsed && (
           <div className="text-xl font-bold text-blue-exxata">
-            Exxata <span className="text-exxata-red">Connect</span>
+            Exxata <span className="text-exxata-red">Control</span>
           </div>
         )}
         <button onClick={toggleSidebar} className="p-2 rounded-lg hover:bg-slate-100 transition-colors">
