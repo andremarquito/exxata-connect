@@ -318,6 +318,16 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
         economica: { status: 'green', items: [] },
       },
       overviewConfig: project.overview_config || project.overview_cards || { widgets: [], layouts: {} },
+      tabsConfig: project.tabs_config || {
+        overview: true,
+        onboarding: true,
+        documents: true,
+        team: true,
+        activities: true,
+        indicators: true,
+        panorama: true,
+        'ai-insights': true
+      },
       physicalProgressReal: project.physical_progress_real || 0,
       physicalProgressContract: project.physical_progress_contract || 0,
       billingProgressContract: project.billing_progress_contract || 0,
@@ -557,6 +567,10 @@ export function ProjectsProvider({ children }) {
       // Mapear campos do patch para os nomes corretos do Supabase
       if (patch.overviewConfig !== undefined) {
         supabaseData.overview_config = patch.overviewConfig;
+      }
+
+      if (patch.tabsConfig !== undefined) {
+        supabaseData.tabs_config = patch.tabsConfig;
       }
 
       if (patch.contract_value !== undefined) {

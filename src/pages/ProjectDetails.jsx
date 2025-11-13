@@ -12,7 +12,7 @@ import {
   BarChart3, Clock, CheckCircle, AlertCircle, TrendingUp, Brain, 
   Download, Upload, Search, Zap, Target, Shield, ArrowLeft, Settings, UserPlus, FilePlus2,
   Image, File, Table, Trash2, PieChart, LineChart, Plus, Edit3, Palette, X, GripVertical, Copy, Camera,
-  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown, Eye, Maximize2, Minimize2, Clipboard
+  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown, Eye, Maximize2, Minimize2, Clipboard, Settings as SettingsIcon
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjects } from '@/contexts/ProjectsContext';
@@ -22,9 +22,9 @@ import OverviewGrid from '@/components/projects/OverviewGridSimple';
 import IndicatorsTab from '@/components/projects/IndicatorsTab';
 import IndicatorTemplateSelector from '@/components/projects/IndicatorTemplateSelector';
 import OnboardingTab from '@/components/projects/OnboardingTab';
+import TabsConfigDialog from '@/components/projects/TabsConfigDialog';
+import IndicatorsPDFExporter from '@/components/pdf/IndicatorsPDFExporter';
 import * as XLSX from 'xlsx';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 
 // ========== FUNÇÕES AUXILIARES GLOBAIS PARA IMPORTAÇÃO ==========
 
@@ -965,7 +965,6 @@ export function ProjectDetails() {
   const [loadedProjectMembers, setLoadedProjectMembers] = useState([]);
   const [showIndicatorModal, setShowIndicatorModal] = useState(false);
   const [editingIndicator, setEditingIndicator] = useState(null);
-  const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const indicatorsContainerRef = useRef(null);
   const conductsImportInputRef = useRef(null);
@@ -975,6 +974,19 @@ export function ProjectDetails() {
   const [isEditingIndicators, setIsEditingIndicators] = useState(false);
   const [draggingIndicatorId, setDraggingIndicatorId] = useState(null);
   const [dragOverIndicatorId, setDragOverIndicatorId] = useState(null);
+  
+  // Estado para configuração de abas
+  const [showTabsConfig, setShowTabsConfig] = useState(false);
+  const [tabsConfig, setTabsConfig] = useState({
+    overview: true,
+    onboarding: true,
+    documents: true,
+    team: true,
+    activities: true,
+    indicators: true,
+    panorama: true,
+    'ai-insights': true
+  });
   
   // Estado para modo "Visualizar como Cliente"
   const [viewAsClient, setViewAsClient] = useState(false);
@@ -1881,6 +1893,31 @@ export function ProjectDetails() {
     loadData();
   }, [project?.id, user?.id]);
 
+  // Carregar configuração de abas do projeto
+  useEffect(() => {
+    if (project?.tabsConfig) {
+      setTabsConfig(project.tabsConfig);
+    }
+  }, [project?.tabsConfig]);
+
+  // Função para salvar configuração de abas
+  const handleSaveTabsConfig = async (newConfig) => {
+    try {
+      await updateProjectBackend(project.id, { tabsConfig: newConfig });
+      setTabsConfig(newConfig);
+      
+      // Se a aba ativa foi ocultada, voltar para o menu
+      if (!newConfig[activeTab] && activeTab !== 'preliminary') {
+        setActiveTab('preliminary');
+      }
+      
+      alert('Configuração de abas atualizada com sucesso!');
+    } catch (error) {
+      console.error('Erro ao salvar configuração de abas:', error);
+      throw error;
+    }
+  };
+
   // Funções para drag & drop e gerenciamento de indicadores
   const handleIndicatorDragStart = (indicatorId, e) => {
     if (!isEditingIndicators) return;
@@ -2416,550 +2453,6 @@ export function ProjectDetails() {
     }
   };
 
-  const handleExportPDF = async () => {
-    const indicators = project?.project_indicators || [];
-    const conducts = Array.isArray(project?.conducts) ? project.conducts : [];
-    const predictiveText = project?.aiPredictiveText || '';
-
-    if (indicators.length === 0 && conducts.length === 0 && !predictiveText) {
-      alert('Não há conteúdo para exportar.');
-      return;
-    }
-
-    setIsExportingPDF(true);
-
-    try {
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 20;
-      const contentWidth = pageWidth - (2 * margin);
-      
-      // Cores da marca Exxata
-      const exxataRed = [213, 29, 7]; // #d51d07
-      const exxataNavy = [9, 24, 43]; // #09182b
-      const lightGray = [248, 250, 252];
-      const darkGray = [71, 85, 105];
-      const textGray = [100, 116, 139];
-      const subtleGray = [226, 232, 240];
-
-      // Util: carregar imagem como DataURL (base64)
-      const loadImageAsDataURL = async (src) => {
-        try {
-          const res = await fetch(src, { cache: 'no-store' });
-          if (!res.ok) return null;
-          const blob = await res.blob();
-          return await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-        } catch (_) {
-          return null;
-        }
-      };
-
-      // Carregar logo oficial (localizado em public/)
-      const logoUrl = '/Assinatura-de-Marca---Exxata_01.png';
-      const logoDataUrl = await loadImageAsDataURL(logoUrl);
-
-      // Função para adicionar cabeçalho em cada página
-      const addHeader = (pageNum, totalPages, logo) => {
-        // Faixa superior cinza claro para maior legibilidade
-        pdf.setFillColor(...lightGray);
-        pdf.rect(0, 0, pageWidth, 18, 'F');
-
-        // Linha inferior sutil
-        pdf.setDrawColor(...subtleGray);
-        pdf.setLineWidth(0.6);
-        pdf.line(0, 18, pageWidth, 18);
-
-        // Logo (se disponível) ou fallback em texto
-        if (logo) {
-          try {
-            const logoH = 10;
-            const logoW = 26; // proporção aproximada
-            pdf.addImage(logo, 'PNG', pageWidth - margin - logoW, 4, logoW, logoH);
-          } catch (_) {
-            // fallback silencioso
-          }
-        } else {
-          pdf.setFontSize(16);
-          pdf.setFont('helvetica', 'bold');
-          pdf.setTextColor(...exxataNavy);
-          pdf.text('EXXATA', pageWidth - margin - 40, 11);
-        }
-
-        // Título da seção/cabeçalho
-        pdf.setFontSize(11);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(...exxataNavy);
-        pdf.text('Exxata Engenharia', margin, 9);
-        pdf.setFontSize(7);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(...darkGray);
-        pdf.text('Atitude imediata. Resultados notáveis.', margin, 14);
-
-        // Número da página
-        pdf.setFontSize(8);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(...textGray);
-        pdf.text(`Página ${pageNum} de ${totalPages}`, pageWidth - margin - 20, 14);
-      };
-
-      // Função para adicionar rodapé elegante com logo e slogan
-      const addFooter = (logo) => {
-        // Área de endereços
-        const footerY = pageHeight - 32;
-        pdf.setDrawColor(...subtleGray);
-        pdf.setLineWidth(0.6);
-        pdf.line(margin, footerY, pageWidth - margin, footerY);
-
-        pdf.setFontSize(7);
-        pdf.setTextColor(...darkGray);
-        pdf.setFont('helvetica', 'bold');
-
-        // Belo Horizonte (badge cinza claro)
-        pdf.setFillColor(...subtleGray);
-        pdf.roundedRect(margin, footerY + 3, 37, 4.5, 1, 1, 'F');
-        pdf.setTextColor(...exxataNavy);
-        pdf.text('Belo Horizonte/MG', margin + 2, footerY + 6);
-
-        pdf.setTextColor(...textGray);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(6.5);
-        const bhText = 'Av. Getúlio Vargas, n° 671, 10° Andar, Funcionários, Belo Horizonte/MG';
-        pdf.text(bhText, margin, footerY + 11);
-
-        // São Paulo (badge cinza claro)
-        pdf.setFillColor(...subtleGray);
-        pdf.roundedRect(margin, footerY + 14, 28, 4.5, 1, 1, 'F');
-        pdf.setTextColor(...exxataNavy);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(7);
-        pdf.text('São Paulo/SP', margin + 2, footerY + 17);
-
-        pdf.setTextColor(...textGray);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(6.5);
-        const spText = 'Avenida Engenheiro Luiz Carlos Berrini, n° 105. Ed. Thera Berrini Office, Brooklin, Sala 111, São Paulo/SP';
-        pdf.text(spText, margin, footerY + 22);
-
-        // Faixa inferior cinza claro com logo central
-        const bandH = 12;
-        pdf.setFillColor(...lightGray);
-        pdf.rect(0, pageHeight - bandH, pageWidth, bandH, 'F');
-
-        if (logo) {
-          try {
-            const logoH = 8;
-            const logoW = 21;
-            const logoX = (pageWidth - logoW) / 2;
-            const logoY = pageHeight - bandH + 2;
-            pdf.addImage(logo, 'PNG', logoX, logoY, logoW, logoH);
-          } catch (_) { /* noop */ }
-        } else {
-          pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(10);
-          pdf.setTextColor(...exxataNavy);
-          const t = 'EXXATA';
-          const tw = pdf.getTextWidth(t);
-          pdf.text(t, (pageWidth - tw) / 2, pageHeight - 4);
-        }
-      };
-
-      let currentPage = 1;
-      let yPosition = 30; // Começar após o cabeçalho com respiro maior
-
-      // Título principal do documento
-      pdf.setFontSize(24);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(...exxataNavy);
-      pdf.text('Relatório do Projeto', margin, yPosition);
-      yPosition += 12;
-
-      // Nome do projeto com destaque
-      pdf.setFillColor(...lightGray);
-      pdf.roundedRect(margin, yPosition - 5, contentWidth, 14, 2, 2, 'F');
-      
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(...exxataNavy);
-      pdf.text(project?.name || 'Sem nome', margin + 5, yPosition + 4);
-      yPosition += 16;
-
-      // Informações do projeto em cards
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(...darkGray);
-      
-      const exportDate = new Date().toLocaleDateString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-      
-      // Card de informações
-      const infoBoxY = yPosition;
-      pdf.setDrawColor(...exxataRed);
-      pdf.setLineWidth(0.5);
-      pdf.line(margin, infoBoxY, margin + 3, infoBoxY);
-      
-      pdf.setTextColor(...textGray);
-      pdf.text(`Data de Exportação: ${exportDate}`, margin + 5, infoBoxY + 1);
-      pdf.text(`Total de Indicadores: ${indicators.length}`, margin + 5, infoBoxY + 6);
-      
-      if (project?.client) {
-        pdf.text(`Cliente: ${project.client}`, margin + 5, infoBoxY + 11);
-        yPosition += 18;
-      } else {
-        yPosition += 13;
-      }
-
-      yPosition += 5;
-
-      // Sumário do relatório
-      pdf.setFillColor(255, 255, 255);
-      pdf.setDrawColor(...textGray);
-      pdf.setLineWidth(0.4);
-      pdf.roundedRect(margin, yPosition, contentWidth, 24, 2, 2, 'FD');
-      
-      pdf.setFontSize(9);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(...exxataNavy);
-      pdf.text('Conteúdo do Relatório:', margin + 5, yPosition + 5);
-      
-      pdf.setFont('helvetica', 'normal');
-      pdf.setFontSize(8);
-      pdf.setTextColor(...darkGray);
-      
-      let summaryY = yPosition + 12;
-      if (indicators.length > 0) {
-        pdf.setFillColor(...exxataRed);
-        pdf.circle(margin + 7, summaryY - 1, 1, 'F');
-        pdf.text(`Indicadores (${indicators.length})`, margin + 11, summaryY);
-        summaryY += 4;
-      }
-      if (conducts.length > 0) {
-        pdf.setFillColor(...exxataRed);
-        pdf.circle(margin + 7, summaryY - 1, 1, 'F');
-        pdf.text(`Condutas (${conducts.length})`, margin + 11, summaryY);
-        summaryY += 4;
-      }
-      if (predictiveText) {
-        pdf.setFillColor(...exxataRed);
-        pdf.circle(margin + 7, summaryY - 1, 1, 'F');
-        pdf.text('Inteligência Preditiva', margin + 11, summaryY);
-      }
-
-      yPosition += 34;
-
-      // Linha divisória elegante
-      pdf.setDrawColor(...subtleGray);
-      pdf.setLineWidth(0.6);
-      pdf.line(margin, yPosition, pageWidth - margin, yPosition);
-      yPosition += 10;
-
-      // Adicionar cabeçalho e rodapé na primeira página
-      const totalPages = indicators.length + 1; // Estimativa
-      addHeader(currentPage, totalPages, logoDataUrl);
-      addFooter(logoDataUrl);
-
-      // ========== SEÇÃO: INDICADORES ==========
-      if (indicators.length > 0) {
-        // Título da seção Indicadores (se houver outras seções)
-        if (conducts.length > 0 || predictiveText) {
-          pdf.setFontSize(20);
-          pdf.setFont('helvetica', 'bold');
-          pdf.setTextColor(...exxataNavy);
-          pdf.text('Indicadores', margin, yPosition);
-          yPosition += 8;
-
-          // Linha divisória
-          pdf.setDrawColor(...subtleGray);
-          pdf.setLineWidth(0.6);
-          pdf.line(margin, yPosition, pageWidth - margin, yPosition);
-          yPosition += 10;
-        }
-
-        // Capturar cada gráfico
-        const chartCards = indicatorsContainerRef.current?.querySelectorAll('.chart-card');
-        
-        if (!chartCards || chartCards.length === 0) {
-          alert('Erro ao capturar os gráficos. Tente novamente.');
-          setIsExportingPDF(false);
-          return;
-        }
-
-        for (let i = 0; i < chartCards.length; i++) {
-        const card = chartCards[i];
-        const indicator = indicators[i];
-        
-        // Verificar se precisa de nova página antes do título
-        if (yPosition > pageHeight - 80) {
-          pdf.addPage();
-          currentPage++;
-          yPosition = 25;
-          addHeader(currentPage, totalPages, logoDataUrl);
-          addFooter(logoDataUrl);
-        }
-
-        // Título do indicador com número (badge minimalista)
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(...exxataNavy);
-
-        const drawIndexBadge = (index, cx, cy) => {
-          const r = 4;
-          pdf.setLineWidth(0.8);
-          pdf.setDrawColor(...exxataRed);
-          pdf.setFillColor(255, 255, 255);
-          pdf.circle(cx, cy, r, 'FD');
-          const label = String(index);
-          pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(9);
-          pdf.setTextColor(...exxataRed);
-          const tw = pdf.getTextWidth(label);
-          pdf.text(label, cx - tw / 2, cy + 1.5);
-        };
-
-        drawIndexBadge(i + 1, margin + 5, yPosition - 2);
-        // Nome do indicador
-        pdf.setTextColor(...exxataNavy);
-        pdf.setFontSize(12);
-        pdf.text(indicator.title, margin + 14, yPosition);
-        yPosition += 8;
-
-        // Capturar o card como imagem
-        const canvas = await html2canvas(card, {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          backgroundColor: '#ffffff'
-        });
-
-        const imgData = canvas.toDataURL('image/png');
-        const imgWidth = contentWidth;
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-        // Verificar se precisa de nova página para o gráfico
-        if (yPosition + imgHeight > pageHeight - 25) {
-          pdf.addPage();
-          currentPage++;
-          yPosition = 25;
-          addHeader(currentPage, totalPages, logoDataUrl);
-          addFooter(logoDataUrl);
-        }
-
-        // Box com sombra para o gráfico
-        pdf.setFillColor(255, 255, 255);
-        pdf.setDrawColor(...subtleGray);
-        pdf.setLineWidth(0.3);
-        pdf.roundedRect(margin - 2, yPosition - 2, contentWidth + 4, imgHeight + 4, 2, 2, 'FD');
-
-        // Adicionar imagem ao PDF
-        pdf.addImage(imgData, 'PNG', margin, yPosition, imgWidth, imgHeight);
-        yPosition += imgHeight + 8;
-
-        // Adicionar observações se existirem
-        if (indicator?.observations) {
-          if (yPosition + 25 > pageHeight - 25) {
-            pdf.addPage();
-            currentPage++;
-            yPosition = 25;
-            addHeader(currentPage, totalPages, logoDataUrl);
-            addFooter(logoDataUrl);
-          }
-
-          // Box de observações com estilo
-          pdf.setFillColor(252, 252, 253);
-          pdf.setDrawColor(...exxataRed);
-          pdf.setLineWidth(0.5);
-          
-          const obsLines = pdf.splitTextToSize(indicator.observations, contentWidth - 12);
-          const obsHeight = (obsLines.length * 4) + 8;
-          
-          pdf.roundedRect(margin, yPosition, contentWidth, obsHeight, 2, 2, 'FD');
-          
-          // Ícone de observação (simulado)
-          pdf.setFillColor(...exxataRed);
-          pdf.circle(margin + 4, yPosition + 4, 1.5, 'F');
-          
-          // Título "Observações"
-          pdf.setFontSize(9);
-          pdf.setFont('helvetica', 'bold');
-          pdf.setTextColor(...exxataNavy);
-          pdf.text('Análise Exxata:', margin + 8, yPosition + 5);
-          
-          // Texto das observações
-          pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(8);
-          pdf.setTextColor(...darkGray);
-          pdf.text(obsLines, margin + 6, yPosition + 10);
-          
-          yPosition += obsHeight + 8;
-        }
-
-        // Espaçamento entre indicadores
-        yPosition += 5;
-        }
-      }
-
-      // ========== SEÇÃO: CONDUTAS ==========
-      if (conducts.length > 0) {
-        // Verificar se precisa de nova página
-        if (yPosition > pageHeight - 100) {
-          pdf.addPage();
-          currentPage++;
-          yPosition = 25;
-          addHeader(currentPage, totalPages, logoDataUrl);
-          addFooter(logoDataUrl);
-        }
-
-        // Título da seção Condutas
-        yPosition += 10;
-        pdf.setFontSize(20);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(...exxataNavy);
-        pdf.text('Condutas', margin, yPosition);
-        yPosition += 8;
-
-        // Linha divisória
-        pdf.setDrawColor(...exxataRed);
-        pdf.setLineWidth(1);
-        pdf.line(margin, yPosition, pageWidth - margin, yPosition);
-        yPosition += 10;
-
-        // Ordenar condutas por urgência
-        const urgencyOrder = { 'Crise': 5, 'Complexo': 4, 'Complicado': 3, 'Difícil': 2, 'Fácil': 1 };
-        const sortedConducts = [...conducts].sort((a, b) => 
-          (urgencyOrder[b.urgency] || 0) - (urgencyOrder[a.urgency] || 0)
-        );
-
-        // Cores por urgência
-        const urgencyColors = {
-          'Crise': [220, 38, 38],
-          'Complexo': [234, 88, 12],
-          'Complicado': [234, 179, 8],
-          'Difícil': [59, 130, 246],
-          'Fácil': [34, 197, 94],
-          'Normal': [100, 116, 139]
-        };
-
-        for (let i = 0; i < sortedConducts.length; i++) {
-          const conduct = sortedConducts[i];
-          const urgencyColor = urgencyColors[conduct.urgency] || textGray;
-
-          // Verificar espaço
-          if (yPosition > pageHeight - 50) {
-            pdf.addPage();
-            currentPage++;
-            yPosition = 25;
-            addHeader(currentPage, totalPages, logoDataUrl);
-            addFooter(logoDataUrl);
-          }
-
-          // Badge de urgência
-          pdf.setFillColor(...urgencyColor);
-          const badgeWidth = pdf.getTextWidth(conduct.urgency) + 6;
-          pdf.roundedRect(margin, yPosition - 3, badgeWidth, 5, 1, 1, 'F');
-          pdf.setTextColor(255, 255, 255);
-          pdf.setFontSize(7);
-          pdf.setFont('helvetica', 'bold');
-          pdf.text(conduct.urgency, margin + 3, yPosition);
-
-          // Número da conduta
-          pdf.setTextColor(...darkGray);
-          pdf.setFont('helvetica', 'normal');
-          pdf.text(`#${i + 1}`, margin + badgeWidth + 5, yPosition);
-          yPosition += 6;
-
-          // Texto da conduta
-          const conductLines = pdf.splitTextToSize(conduct.text || 'Sem descrição', contentWidth - 6);
-          const conductHeight = (conductLines.length * 4.5) + 8;
-
-          pdf.setFillColor(255, 255, 255);
-          pdf.setDrawColor(...lightGray);
-          pdf.setLineWidth(0.3);
-          pdf.roundedRect(margin, yPosition, contentWidth, conductHeight, 2, 2, 'FD');
-
-          pdf.setFontSize(9);
-          pdf.setTextColor(...darkGray);
-          pdf.text(conductLines, margin + 3, yPosition + 5);
-
-          yPosition += conductHeight + 6;
-        }
-      }
-
-      // ========== SEÇÃO: INTELIGÊNCIA PREDITIVA ==========
-      if (predictiveText) {
-        // Verificar se precisa de nova página
-        if (yPosition > pageHeight - 100) {
-          pdf.addPage();
-          currentPage++;
-          yPosition = 25;
-          addHeader(currentPage, totalPages, logoDataUrl);
-          addFooter(logoDataUrl);
-        }
-
-        // Título da seção
-        yPosition += 10;
-        pdf.setFontSize(20);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(...exxataNavy);
-        pdf.text('Inteligência Preditiva', margin, yPosition);
-        yPosition += 8;
-
-        // Linha divisória
-        pdf.setDrawColor(...exxataRed);
-        pdf.setLineWidth(1);
-        pdf.line(margin, yPosition, pageWidth - margin, yPosition);
-        yPosition += 10;
-
-        // Box de conteúdo
-        const predictiveLines = pdf.splitTextToSize(predictiveText, contentWidth - 8);
-        const predictiveHeight = (predictiveLines.length * 4.5) + 12;
-
-        // Verificar se cabe na página
-        if (yPosition + predictiveHeight > pageHeight - 30) {
-          pdf.addPage();
-          currentPage++;
-          yPosition = 25;
-          addHeader(currentPage, totalPages, logoDataUrl);
-          addFooter(logoDataUrl);
-        }
-
-        // Box com gradiente simulado
-        pdf.setFillColor(239, 246, 255); // Azul claro
-        pdf.setDrawColor(59, 130, 246); // Azul
-        pdf.setLineWidth(0.5);
-        pdf.roundedRect(margin, yPosition, contentWidth, predictiveHeight, 3, 3, 'FD');
-
-        // Ícone decorativo
-        pdf.setFillColor(59, 130, 246);
-        pdf.circle(margin + 5, yPosition + 6, 2, 'F');
-
-        // Texto
-        pdf.setFontSize(9);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(...darkGray);
-        pdf.text(predictiveLines, margin + 4, yPosition + 8);
-      }
-
-      // Salvar o PDF
-      const fileName = `Exxata_Relatorio_${project?.name?.replace(/[^a-zA-Z0-9]/g, '_') || 'projeto'}_${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(fileName);
-
-    } catch (error) {
-      console.error('Erro ao exportar PDF:', error);
-      alert('Erro ao exportar PDF. Tente novamente.');
-    } finally {
-      setIsExportingPDF(false);
-    }
-  };
 
   // Funções para export/import de atividades
   const handleExportActivities = () => {
@@ -3973,31 +3466,49 @@ export function ProjectDetails() {
 
       <Tabs value={activeTab} className="space-y-4" onValueChange={setActiveTab}>
         <div className="flex justify-between items-center">
-          <TabsList>
-            <TabsTrigger value="preliminary">Menu</TabsTrigger>
-            <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-            <TabsTrigger value="onboarding">Onboarding</TabsTrigger>
-            <TabsTrigger value="documents">Documentos</TabsTrigger>
-            <TabsTrigger value="team">Equipe</TabsTrigger>
-            <TabsTrigger value="activities">Atividades</TabsTrigger>
-            <TabsTrigger value="indicators">Indicadores</TabsTrigger>
-            <TabsTrigger value="panorama">Panorama Atual</TabsTrigger>
-            <TabsTrigger value="ai-insights">Inteligência Humana</TabsTrigger>
-          </TabsList>
+          <div className="flex items-center gap-3">
+            <TabsList>
+              <TabsTrigger value="preliminary">Menu</TabsTrigger>
+              {tabsConfig.overview && <TabsTrigger value="overview">Visão Geral</TabsTrigger>}
+              {tabsConfig.onboarding && <TabsTrigger value="onboarding">Onboarding</TabsTrigger>}
+              {tabsConfig.documents && <TabsTrigger value="documents">Documentos</TabsTrigger>}
+              {tabsConfig.team && <TabsTrigger value="team">Equipe</TabsTrigger>}
+              {tabsConfig.activities && <TabsTrigger value="activities">Atividades</TabsTrigger>}
+              {tabsConfig.indicators && <TabsTrigger value="indicators">Indicadores</TabsTrigger>}
+              {tabsConfig.panorama && <TabsTrigger value="panorama">Panorama Atual</TabsTrigger>}
+              {tabsConfig['ai-insights'] && <TabsTrigger value="ai-insights">Inteligência Humana</TabsTrigger>}
+            </TabsList>
+            
+            {/* Botão de Configuração de Abas (apenas Admin/Gerente) */}
+            {(isAdmin || isManager) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTabsConfig(true)}
+                className="gap-2"
+                title="Configurar abas visíveis"
+              >
+                <SettingsIcon className="h-4 w-4" />
+                Configurar Abas
+              </Button>
+            )}
+          </div>
           
-          {activeTab === 'documents' && (
-            <Button onClick={handleUploadDocument} size="sm" className="gap-1">
-              <FilePlus2 className="h-4 w-4" />
-              Novo Documento
-            </Button>
-          )}
-          
-          {activeTab === 'team' && canEdit && (
-            <Button onClick={() => setShowAddMember(true)} size="sm" className="gap-1 bg-exxata-red hover:bg-red-700 text-white">
-              <UserPlus className="h-4 w-4" />
-              Adicionar Membro
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {activeTab === 'documents' && (
+              <Button onClick={handleUploadDocument} size="sm" className="gap-1">
+                <FilePlus2 className="h-4 w-4" />
+                Novo Documento
+              </Button>
+            )}
+            
+            {activeTab === 'team' && canEdit && (
+              <Button onClick={() => setShowAddMember(true)} size="sm" className="gap-1 bg-exxata-red hover:bg-red-700 text-white">
+                <UserPlus className="h-4 w-4" />
+                Adicionar Membro
+              </Button>
+            )}
+          </div>
         </div>
 
         <TabsContent value="preliminary" className="pl-4 pb-8">
@@ -4011,7 +3522,7 @@ export function ProjectDetails() {
               { key: 'indicators', title: 'Indicadores', desc: 'Gráficos e métricas do projeto.', icon: <BarChart3 className="h-5 w-5 text-exxata-red" /> },
               { key: 'panorama', title: 'Panorama Atual', desc: 'Situação técnica, física e econômica.', icon: <Shield className="h-5 w-5 text-exxata-red" /> },
               { key: 'ai-insights', title: 'Inteligência Humana', desc: 'Análises e percepções do time.', icon: <Brain className="h-5 w-5 text-exxata-red" /> },
-            ].map(sec => (
+            ].filter(sec => tabsConfig[sec.key]).map(sec => (
               <Card key={sec.key} className="cursor-pointer hover:shadow-md transition" onClick={() => setActiveTab(sec.key)}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -4085,10 +3596,10 @@ export function ProjectDetails() {
                   <Upload className="h-4 w-4" />
                   Importar Excel
                 </Button>
-                <Button onClick={handleExportPDF} variant="outline" size="sm" className="gap-1" disabled={isExportingPDF}>
-                  <FileDown className="h-4 w-4" />
-                  {isExportingPDF ? 'Exportando...' : 'Exportar PDF'}
-                </Button>
+                <IndicatorsPDFExporter 
+                  project={project} 
+                  indicators={project?.project_indicators || []} 
+                />
               </>
             )}
             <input
@@ -4127,7 +3638,7 @@ export function ProjectDetails() {
                   title={isEditingIndicators ? 'Arraste para reordenar' : undefined}
                 >
                   <Card className="chart-card h-full" data-indicator-id={indicator.id}>
-                    <CardHeader className="flex flex-row items-center justify-between">
+                    <CardHeader className="card-header-pdf flex flex-row items-center justify-between">
                       <CardTitle>{indicator.title}</CardTitle>
                       {canEdit && (
                         <div className="flex gap-2 indicator-action-buttons">
@@ -4181,7 +3692,7 @@ export function ProjectDetails() {
                         </div>
                       )}
                     </CardHeader>
-                    <CardContent className="space-y-4">
+                    <CardContent className="indicator-card-content space-y-4">
                       <IndicatorChart indicator={indicator} />
                       {indicator.observations && (
                         <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg">
@@ -5274,6 +4785,14 @@ export function ProjectDetails() {
           onClose={() => setShowTemplateSelector(false)}
         />
       )}
+
+      {/* Dialog de Configuração de Abas */}
+      <TabsConfigDialog
+        open={showTabsConfig}
+        onOpenChange={setShowTabsConfig}
+        currentConfig={tabsConfig}
+        onSave={handleSaveTabsConfig}
+      />
     </div>
   );
 }
