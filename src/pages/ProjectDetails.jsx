@@ -3533,6 +3533,25 @@ export function ProjectDetails() {
                 </CardHeader>
               </Card>
             ))}
+            
+            {/* Card de Exportar Relatório PDF */}
+            {tabsConfig.indicators && (
+              <Card className="cursor-pointer hover:shadow-md transition border-exxata-red/20">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileDown className="h-5 w-5 text-exxata-red" />
+                    Exportar Relatório PDF
+                  </CardTitle>
+                  <CardDescription>Gerar relatório completo com todos os indicadores.</CardDescription>
+                  <CardContent className="pt-4 px-0">
+                    <IndicatorsPDFExporter 
+                      project={project} 
+                      indicators={project?.project_indicators || []} 
+                    />
+                  </CardContent>
+                </CardHeader>
+              </Card>
+            )}
           </div>
         </TabsContent>
 
