@@ -17,6 +17,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjects } from '@/contexts/ProjectsContext';
 import { useUsers } from '@/contexts/UsersContext';
+import { fileService } from '@/services/supabaseService';
 import { useState, useEffect, useRef } from 'react';
 import OverviewGrid from '@/components/projects/OverviewGridSimple';
 import IndicatorsTab from '@/components/projects/IndicatorsTab';
@@ -115,6 +116,27 @@ const parseNumberBR = (value) => {
 };
 
 // ========== FIM DAS FUNÇÕES AUXILIARES ==========
+
+// ========== CATEGORIAS DE DOCUMENTOS ==========
+const DOCUMENT_CATEGORIES = [
+  { value: 'Correspondência', label: 'Correspondência', color: 'bg-blue-100 text-blue-800 border-blue-200' },
+  { value: 'ATA', label: 'ATA', color: 'bg-purple-100 text-purple-800 border-purple-200' },
+  { value: 'E-mail', label: 'E-mail', color: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
+  { value: 'RDO', label: 'RDO', color: 'bg-green-100 text-green-800 border-green-200' },
+  { value: 'Relatório', label: 'Relatório', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+  { value: 'Análise', label: 'Análise', color: 'bg-orange-100 text-orange-800 border-orange-200' },
+  { value: 'Singularidades', label: 'Singularidades', color: 'bg-red-100 text-red-800 border-red-200' },
+  { value: 'Notificação', label: 'Notificação', color: 'bg-pink-100 text-pink-800 border-pink-200' },
+  { value: 'Plano de Ação', label: 'Plano de Ação', color: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
+  { value: 'Parecer', label: 'Parecer', color: 'bg-violet-100 text-violet-800 border-violet-200' },
+  { value: 'Checklist', label: 'Checklist', color: 'bg-teal-100 text-teal-800 border-teal-200' },
+  { value: 'Procedimento', label: 'Procedimento', color: 'bg-lime-100 text-lime-800 border-lime-200' }
+];
+
+const getCategoryColor = (category) => {
+  const cat = DOCUMENT_CATEGORIES.find(c => c.value === category);
+  return cat ? cat.color : 'bg-slate-100 text-slate-800 border-slate-200';
+};
 
 // Componente do Modal para Adicionar/Editar Indicador
 const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
@@ -959,6 +981,19 @@ export function ProjectDetails() {
   const [searchExxata, setSearchExxata] = useState('');
   const [clientPage, setClientPage] = useState(1);
   const [exxataPage, setExxataPage] = useState(1);
+  
+  // Filtros de categoria e data para documentos
+  const [categoryFilterClient, setCategoryFilterClient] = useState('all');
+  const [categoryFilterExxata, setCategoryFilterExxata] = useState('all');
+  const [dateFilterClientStart, setDateFilterClientStart] = useState('');
+  const [dateFilterClientEnd, setDateFilterClientEnd] = useState('');
+  const [dateFilterExxataStart, setDateFilterExxataStart] = useState('');
+  const [dateFilterExxataEnd, setDateFilterExxataEnd] = useState('');
+  
+  // Modal de categoria
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [selectedFileForCategory, setSelectedFileForCategory] = useState(null);
+  const [updatingCategory, setUpdatingCategory] = useState(false);
   const [conductsLoading, setConductsLoading] = useState(false);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -1730,9 +1765,53 @@ export function ProjectDetails() {
   const onBrowseInputChange = async (e, source) => {
     const files = Array.from(e.target.files || []);
     if (files.length) {
-      await Promise.all(files.map((f) => addProjectFile(project.id, f, source)));
+      const uploadedFiles = await Promise.all(files.map((f) => addProjectFile(project.id, f, source)));
+      // Após upload, abrir modal de categoria para cada arquivo
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        // Abrir modal para o primeiro arquivo (pode ser expandido para múltiplos)
+        const firstFile = uploadedFiles[0];
+        if (firstFile) {
+          setSelectedFileForCategory(firstFile);
+          setShowCategoryModal(true);
+        }
+      }
     }
     e.target.value = null;
+  };
+
+  // Função para atualizar categoria do arquivo
+  const handleUpdateFileCategory = async (fileId, category) => {
+    console.log('🔄 Iniciando atualização de categoria:', { fileId, category });
+    setUpdatingCategory(true);
+    
+    try {
+      // Atualizar categoria no Supabase
+      console.log('📤 Chamando fileService.updateFileCategory...');
+      const result = await fileService.updateFileCategory(fileId, category);
+      console.log('✅ Categoria atualizada no Supabase:', result);
+      
+      // Recarregar projetos para atualizar a lista
+      console.log('🔄 Recarregando projetos...');
+      await refreshProjects();
+      console.log('✅ Projetos recarregados');
+      
+      // Fechar modal
+      setShowCategoryModal(false);
+      setSelectedFileForCategory(null);
+      console.log('✅ Modal fechado com sucesso');
+      
+    } catch (error) {
+      console.error('❌ Erro ao atualizar categoria:', error);
+      console.error('❌ Detalhes do erro:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      });
+      alert(`Erro ao atualizar categoria: ${error.message || 'Erro desconhecido'}`);
+    } finally {
+      setUpdatingCategory(false);
+    }
   };
 
   const normalizeMember = (member) => {
@@ -3793,6 +3872,8 @@ export function ProjectDetails() {
         <TabsContent value="documents" className="pl-4 pb-8">
           {(() => {
             const allFiles = Array.isArray(project.files) ? project.files : [];
+            
+            // Filtros para arquivos do cliente
             const qClient = searchClient.trim().toLowerCase();
             const clientFiles = allFiles
               .filter(f => f.source === 'client')
@@ -3800,8 +3881,15 @@ export function ProjectDetails() {
                 const name = (f.name || '').toLowerCase();
                 const ext = (f.ext || '').toLowerCase();
                 const uploader = (f.uploadedBy?.name || '').toLowerCase();
-                return !qClient || name.includes(qClient) || ext.includes(qClient) || uploader.includes(qClient);
+                const matchesSearch = !qClient || name.includes(qClient) || ext.includes(qClient) || uploader.includes(qClient);
+                const matchesCategory = categoryFilterClient === 'all' || f.category === categoryFilterClient;
+                const fileDate = f.uploadedAt ? new Date(f.uploadedAt).toISOString().split('T')[0] : null;
+                const matchesDateStart = !dateFilterClientStart || (fileDate && fileDate >= dateFilterClientStart);
+                const matchesDateEnd = !dateFilterClientEnd || (fileDate && fileDate <= dateFilterClientEnd);
+                return matchesSearch && matchesCategory && matchesDateStart && matchesDateEnd;
               });
+            
+            // Filtros para arquivos da Exxata
             const qExxata = searchExxata.trim().toLowerCase();
             const exxataFiles = allFiles
               .filter(f => f.source === 'exxata')
@@ -3809,7 +3897,12 @@ export function ProjectDetails() {
                 const name = (f.name || '').toLowerCase();
                 const ext = (f.ext || '').toLowerCase();
                 const uploader = (f.uploadedBy?.name || '').toLowerCase();
-                return !qExxata || name.includes(qExxata) || ext.includes(qExxata) || uploader.includes(qExxata);
+                const matchesSearch = !qExxata || name.includes(qExxata) || ext.includes(qExxata) || uploader.includes(qExxata);
+                const matchesCategory = categoryFilterExxata === 'all' || f.category === categoryFilterExxata;
+                const fileDate = f.uploadedAt ? new Date(f.uploadedAt).toISOString().split('T')[0] : null;
+                const matchesDateStart = !dateFilterExxataStart || (fileDate && fileDate >= dateFilterExxataStart);
+                const matchesDateEnd = !dateFilterExxataEnd || (fileDate && fileDate <= dateFilterExxataEnd);
+                return matchesSearch && matchesCategory && matchesDateStart && matchesDateEnd;
               });
             return (
               <div className="grid gap-6 md:grid-cols-1">
@@ -3821,15 +3914,47 @@ export function ProjectDetails() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {/* Busca */}
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-                        <Input
-                          placeholder="Buscar arquivo..."
-                          className="w-full pl-8"
-                          value={searchExxata}
-                          onChange={(e) => { setSearchExxata(e.target.value); setExxataPage(1); }}
-                        />
+                      {/* Filtros */}
+                      <div className="space-y-3">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+                            <Input
+                              placeholder="Buscar por nome..."
+                              className="w-full pl-8"
+                              value={searchExxata}
+                              onChange={(e) => { setSearchExxata(e.target.value); setExxataPage(1); }}
+                            />
+                          </div>
+                          <Select value={categoryFilterExxata} onValueChange={(val) => { setCategoryFilterExxata(val); setExxataPage(1); }}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Todas as categorias" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todas as categorias</SelectItem>
+                              {DOCUMENT_CATEGORIES.map(cat => (
+                                <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-500 mb-1.5 block">Período de Envio</label>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <Input
+                              type="date"
+                              placeholder="Data inicial"
+                              value={dateFilterExxataStart}
+                              onChange={(e) => { setDateFilterExxataStart(e.target.value); setExxataPage(1); }}
+                            />
+                            <Input
+                              type="date"
+                              placeholder="Data final"
+                              value={dateFilterExxataEnd}
+                              onChange={(e) => { setDateFilterExxataEnd(e.target.value); setExxataPage(1); }}
+                            />
+                          </div>
+                        </div>
                       </div>
 
                       {/* Upload drag-and-drop + botão */}
@@ -3879,12 +4004,17 @@ export function ProjectDetails() {
                               <>
                                 {exxataVisible.map((file) => (
                                   <div key={file.id} className="border rounded-lg p-3 flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-3 flex-1">
                                     <FileKindIcon ext={file.ext} />
                                     <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                                       {(file.ext || 'FILE').toUpperCase()}
                                     </span>
-                                    <div>
+                                    {file.category && (
+                                      <Badge className={`text-xs ${getCategoryColor(file.category)}`}>
+                                        {file.category}
+                                      </Badge>
+                                    )}
+                                    <div className="flex-1">
                                       <button className="font-medium text-blue-700 hover:underline" onClick={() => triggerDownload(file)}>
                                         {file.original_name || file.name}
                                       </button>
@@ -3892,8 +4022,22 @@ export function ProjectDetails() {
                                         {formatBytes(file.size)} • Enviado por {file.uploadedBy?.name || 'Usuário'}{file.author && file.author.name && file.author.name !== file.uploadedBy?.name ? ` • Autor ${file.author.name}` : ''} • {new Date(file.uploadedAt).toLocaleString('pt-BR')}
                                       </div>
                                     </div>
-                                  </div>
-                              <div className="flex items-center">
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {!isClientUser && !viewAsClient && (
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedFileForCategory(file);
+                                      setShowCategoryModal(true);
+                                    }}
+                                    title="Definir categoria"
+                                  >
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Categoria
+                                  </Button>
+                                )}
                                 <Button variant="outline" size="sm" onClick={() => triggerDownload(file)}>
                                   <Download className="h-4 w-4 mr-2" />
                                   Baixar
@@ -3902,7 +4046,7 @@ export function ProjectDetails() {
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="ml-2 text-red-600 border-red-200 hover:bg-red-50"
+                                    className="text-red-600 border-red-200 hover:bg-red-50"
                                     onClick={() => {
                                       if (window.confirm(`Excluir o arquivo "${file.name}"?`)) {
                                         deleteProjectFile(project.id, file.id);
@@ -3939,6 +4083,82 @@ export function ProjectDetails() {
               </div>
             );
           })()}
+          
+          {/* Modal de Categoria */}
+          {showCategoryModal && selectedFileForCategory && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/30" onClick={() => {
+                if (!updatingCategory) {
+                  setShowCategoryModal(false);
+                  setSelectedFileForCategory(null);
+                }
+              }} />
+              <Card className="relative z-50 w-full max-w-md mx-4">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-exxata-red" />
+                    Definir Categoria do Documento
+                  </CardTitle>
+                  <CardDescription>
+                    {updatingCategory ? (
+                      <span className="text-blue-600 font-medium">Atualizando categoria...</span>
+                    ) : (
+                      `Selecione uma categoria para organizar o arquivo "${selectedFileForCategory.name}"`
+                    )}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-2">
+                    {DOCUMENT_CATEGORIES.map((cat) => (
+                      <Button
+                        key={cat.value}
+                        variant="outline"
+                        disabled={updatingCategory}
+                        className={`justify-start ${selectedFileForCategory.category === cat.value ? 'ring-2 ring-exxata-red' : ''} ${updatingCategory ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        onClick={() => {
+                          if (!updatingCategory) {
+                            handleUpdateFileCategory(selectedFileForCategory.id, cat.value);
+                          }
+                        }}
+                      >
+                        <Badge className={`text-xs mr-2 ${cat.color}`}>
+                          {cat.label}
+                        </Badge>
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2 border-t">
+                    <Button 
+                      variant="outline"
+                      disabled={updatingCategory}
+                      onClick={() => {
+                        if (!updatingCategory) {
+                          setShowCategoryModal(false);
+                          setSelectedFileForCategory(null);
+                        }
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    {selectedFileForCategory.category && (
+                      <Button 
+                        variant="outline"
+                        disabled={updatingCategory}
+                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => {
+                          if (!updatingCategory) {
+                            handleUpdateFileCategory(selectedFileForCategory.id, null);
+                          }
+                        }}
+                      >
+                        Remover Categoria
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="team" className="pl-4 pb-8">

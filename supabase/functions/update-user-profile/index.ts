@@ -54,10 +54,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    const isAdmin = profile.role === "admin" || profile.role === "administrator";
+    const isAdmin = profile.role === "admin" || profile.role === "administrator" || profile.role === "manager" || profile.role === "gerente";
     if (!isAdmin) {
       return new Response(
-        JSON.stringify({ error: "Insufficient permissions. Admin access required." }),
+        JSON.stringify({ error: "Insufficient permissions. Admin or Manager access required." }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

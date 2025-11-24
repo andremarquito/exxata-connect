@@ -129,16 +129,14 @@ export function Dashboard() {
   };
 
   const openNewProject = () => {
-    // Verificar se o usuário é cliente
-    const isClient = ((user?.role || '').toLowerCase() === 'client' || (user?.role || '').toLowerCase() === 'cliente');
-    
-    if (isClient) {
-      alert('Você não possui permissão para criar novos projetos. Entre em contato com o administrador.');
-      return;
-    }
-    
     window.dispatchEvent(new Event('open-new-project-modal'));
   };
+
+  // Verificar se o usuário tem permissão para criar projetos
+  const userRole = (user?.role || '').toLowerCase();
+  const isClient = (userRole === 'client' || userRole === 'cliente');
+  const isCollaborator = (userRole === 'collaborator' || userRole === 'colaborador' || userRole === 'consultor' || userRole === 'consultant');
+  const canCreateProject = !isClient && !isCollaborator;
 
   // Definição dos tipos de cards disponíveis
   const availableCardTypes = {
@@ -446,18 +444,16 @@ export function Dashboard() {
                       </SelectContent>
                     </Select>
                   )}
-                  <Button 
-                    onClick={openNewProject} 
-                    className={`rounded-xl px-6 ${
-                      ((user?.role || '').toLowerCase() === 'client' || (user?.role || '').toLowerCase() === 'cliente')
-                        ? 'bg-slate-400 hover:bg-slate-500 text-white cursor-not-allowed'
-                        : 'bg-exxata-red hover:bg-red-700 text-white'
-                    }`}
-                    title={((user?.role || '').toLowerCase() === 'client' || (user?.role || '').toLowerCase() === 'cliente') ? 'Sem permissão para criar projetos' : 'Criar novo projeto'}
-                  >
-                    <Building2 className="h-4 w-4 mr-2" />
-                    Novo Projeto
-                  </Button>
+                  {canCreateProject && (
+                    <Button 
+                      onClick={openNewProject} 
+                      className="rounded-xl px-6 bg-exxata-red hover:bg-red-700 text-white"
+                      title="Criar novo projeto"
+                    >
+                      <Building2 className="h-4 w-4 mr-2" />
+                      Novo Projeto
+                    </Button>
+                  )}
                 </div>
               </div>
             </CardHeader>
@@ -521,20 +517,22 @@ export function Dashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold text-blue-exxata mb-1">Nenhum projeto disponível</h3>
-                      <p className="text-sm text-slate-600">Crie seu primeiro projeto para começar a gerenciar com a metodologia Exxata.</p>
+                      <p className="text-sm text-slate-600">
+                        {canCreateProject 
+                          ? 'Crie seu primeiro projeto para começar a gerenciar com a metodologia Exxata.'
+                          : 'Aguarde a adição a um projeto pela equipe administrativa.'}
+                      </p>
                     </div>
-                    <Button 
-                      onClick={openNewProject} 
-                      className={`rounded-xl px-6 ${
-                        ((user?.role || '').toLowerCase() === 'client' || (user?.role || '').toLowerCase() === 'cliente')
-                          ? 'bg-slate-400 hover:bg-slate-500 text-white cursor-not-allowed'
-                          : 'bg-exxata-red hover:bg-red-700 text-white'
-                      }`}
-                      title={((user?.role || '').toLowerCase() === 'client' || (user?.role || '').toLowerCase() === 'cliente') ? 'Sem permissão para criar projetos' : 'Criar novo projeto'}
-                    >
-                      <Building2 className="h-4 w-4 mr-2" />
-                      Criar Projeto
-                    </Button>
+                    {canCreateProject && (
+                      <Button 
+                        onClick={openNewProject} 
+                        className="rounded-xl px-6 bg-exxata-red hover:bg-red-700 text-white"
+                        title="Criar novo projeto"
+                      >
+                        <Building2 className="h-4 w-4 mr-2" />
+                        Criar Projeto
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>

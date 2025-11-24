@@ -157,8 +157,15 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
             file_path,
             file_size,
             mime_type,
+            created_at,
             uploaded_by,
-            created_at
+            source,
+            original_name,
+            extension,
+            storage_path,
+            uploaded_at,
+            metadata,
+            category
           ),
           project_indicators(
             id,
@@ -214,8 +221,15 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
             file_path,
             file_size,
             mime_type,
+            created_at,
             uploaded_by,
-            created_at
+            source,
+            original_name,
+            extension,
+            storage_path,
+            uploaded_at,
+            metadata,
+            category
           ),
           project_indicators(
             id,
@@ -346,14 +360,17 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
       files: (project.project_files || []).map(file => ({
         id: file.id,
         name: file.name,
-        size: file.file_size,
+        original_name: file.original_name || file.name,
+        size: file.size_bytes || file.file_size,
         type: file.mime_type,
-        ext: file.name ? file.name.split('.').pop() : '',
-        source: 'supabase',
+        ext: file.extension || (file.name ? file.name.split('.').pop() : ''),
+        source: file.source || 'supabase',
         url: file.file_path,
+        storagePath: file.storage_path,
         uploadedBy: file.uploaded_by,
         author: file.uploaded_by,
-        uploadedAt: file.created_at,
+        uploadedAt: file.uploaded_at || file.created_at,
+        category: file.category,
       })),
       indicators: (project.project_indicators || []).map(ind => ({
         id: ind.id,
@@ -1015,7 +1032,8 @@ export function ProjectsProvider({ children }) {
             uploadedBy: f.uploaded_by,
             author: f.uploaded_by,
             storagePath: f.storage_path, // Para obter URLs públicas
-            metadata: f.metadata
+            metadata: f.metadata,
+            category: f.category || null
           }))
         };
       }));

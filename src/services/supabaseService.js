@@ -211,13 +211,17 @@ export const projectService = {
             name,
             original_name,
             size_bytes,
+            file_size,
             mime_type,
             extension,
             source,
+            file_path,
             storage_path,
             uploaded_at,
             uploaded_by,
-            metadata
+            metadata,
+            category,
+            created_at
           ),
           project_indicators(
             id,
@@ -697,6 +701,24 @@ export const fileService = {
       return data;
     } catch (error) {
       console.error('Erro ao atualizar arquivo:', error);
+      throw error;
+    }
+  },
+
+  // Atualizar categoria do arquivo
+  async updateFileCategory(fileId, category) {
+    try {
+      const { data, error } = await supabase
+        .from('project_files')
+        .update({ category })
+        .eq('id', fileId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Erro ao atualizar categoria do arquivo:', error);
       throw error;
     }
   }

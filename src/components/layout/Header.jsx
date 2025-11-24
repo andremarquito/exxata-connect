@@ -57,18 +57,16 @@ export function Header({ onNewProject }) {
               <Bell className="h-5 w-5" />
             </button>
 
-            {/* Novo Projeto */}
-            <Button 
-              onClick={handleNewProject}
-              className={`rounded-lg px-4 py-2 ${
-                isRestricted
-                  ? 'bg-slate-400 hover:bg-slate-500 text-white cursor-not-allowed'
-                  : 'bg-exxata-red hover:bg-red-700 text-white'
-              }`}
-              title={isRestricted ? 'Sem permissão para criar projetos' : 'Criar novo projeto'}
-            >
-              Novo Projeto
-            </Button>
+            {/* Novo Projeto - Oculto para colaborador e cliente */}
+            {!isRestricted && (
+              <Button 
+                onClick={handleNewProject}
+                className="rounded-lg px-4 py-2 bg-exxata-red hover:bg-red-700 text-white"
+                title="Criar novo projeto"
+              >
+                Novo Projeto
+              </Button>
+            )}
 
             {/* Menu do usuário */}
             <div className="relative">
