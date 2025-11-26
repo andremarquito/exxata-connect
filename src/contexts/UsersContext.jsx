@@ -57,7 +57,7 @@ export function UsersProvider({ children }) {
         };
       });
       
-      console.log('📋 Profiles mapeados:', mappedProfiles.map(p => ({ id: p.id, name: p.name, email: p.email })));
+      // Profiles carregados com sucesso
       return mappedProfiles;
     } catch (error) {
       console.error('❌ Erro ao carregar profiles:', error);
@@ -104,9 +104,7 @@ export function UsersProvider({ children }) {
         const supabaseUsers = await loadProfilesFromSupabase();
         
         if (supabaseUsers && supabaseUsers.length > 0) {
-          console.log('🔄 Iniciando merge de usuários...');
-          console.log('👥 Usuários do Supabase:', supabaseUsers);
-          console.log('💻 Usuários locais:', localUsers);
+          // Merge de usuários do Supabase e locais
           
           // Fazer merge dos usuários: Supabase tem prioridade
           const mergedUsers = [...supabaseUsers];
@@ -118,7 +116,7 @@ export function UsersProvider({ children }) {
               su.id === localUser.id
             );
             
-            console.log(`🔍 Verificando usuário local ${localUser.email}:`, existsInSupabase ? 'JÁ EXISTE no Supabase' : 'NÃO EXISTE, será adicionado');
+            // Verificando existência do usuário
             
             if (!existsInSupabase) {
               mergedUsers.push({
@@ -128,12 +126,7 @@ export function UsersProvider({ children }) {
             }
           });
 
-          console.log('📊 Merge realizado:', {
-            supabase: supabaseUsers.length,
-            local: localUsers.length,
-            merged: mergedUsers.length,
-            finalUsers: mergedUsers.map(u => ({ id: u.id, name: u.name, email: u.email, source: u.supabaseProfile ? 'Supabase' : 'Local' }))
-          });
+          // Merge realizado com sucesso
           
           setUsers(mergedUsers);
         } else {

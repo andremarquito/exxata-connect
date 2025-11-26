@@ -104,7 +104,7 @@ const seedProjects = [
 // Funções para integração com Supabase
 const loadProjectsFromSupabase = async (userId, userRole) => {
   try {
-    console.log(' Tentando carregar projetos do Supabase para usuário:', userId);
+    // Carregando projetos do Supabase
     
     let data, error;
     const normalizedRole = (userRole || '').toLowerCase();
@@ -112,16 +112,16 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
     const isClient = roleWithoutSpaces === 'cliente' || roleWithoutSpaces === 'client';
     const isCollaborator = ['colaborador', 'collaborator', 'consultor', 'consultant'].includes(roleWithoutSpaces);
     
-    console.log('🔍 Carregando projetos para:', { userId, userRole, normalizedRole, isClient, isCollaborator });
+    // Verificando permissões do usuário
     
     // Estratégia unificada: sempre usar consultas diretas que funcionam com RLS
-    console.log('📝 Carregando projetos usando consultas diretas com RLS...');
+    // Usando consultas diretas com RLS
     
     let basicResult;
     
     if (isClient || isCollaborator) {
       // Para clientes e colaboradores: carregar projetos diretamente via RLS (sem pré-busca em project_members)
-      console.log('👤 Usuário com acesso restrito, carregando projetos via RLS + JOIN de membros');
+      // Usuário com acesso restrito
 
       basicResult = await supabase
         .from('projects')
@@ -179,14 +179,11 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
           )
         `);
 
-      console.log('👥 Projetos (com membros) carregados via RLS:', {
-        projectsCount: basicResult.data?.length || 0,
-        error: basicResult.error
-      });
+      // Projetos carregados via RLS
     } else {
       // Para admins/managers: buscar TODOS os projetos (RLS já controla acesso)
       // Carregar membros via JOIN diretamente
-      console.log('👔 Usuário staff detectado, carregando TODOS os projetos via RLS');
+      // Usuário staff detectado
       basicResult = await supabase
         .from('projects')
         .select(`
@@ -258,15 +255,7 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
       return null;
     }
 
-    console.log('✅ Projetos encontrados no Supabase:', data?.length || 0);
-    if (data && data.length > 0) {
-      console.log('📋 Lista de projetos carregados:', data.map(p => ({
-        id: p.id,
-        name: p.name,
-        created_by: p.created_by,
-        members_count: p.project_members?.length || 0
-      })));
-    }
+    // Projetos carregados do Supabase
 
     // Se não há dados, usar fallback
     if (!data || data.length === 0) {
@@ -452,26 +441,20 @@ export function ProjectsProvider({ children }) {
       // Verificar se o user.id é um UUID válido (Supabase) ou ID local
       // Usar uma verificação mais simples: se o ID parece ser UUID, tentar Supabase
       const isSupabaseUser = typeof user.id === 'string' && user.id.length > 10 && user.id.includes('-');
-      console.log('🔍 Verificando tipo de usuário:', {
-        userId: user.id,
-        userIdType: typeof user.id,
-        userIdLength: user.id?.length,
-        hasDashes: user.id?.includes('-'),
-        isSupabaseUser
-      });
+      // Verificando tipo de usuário
 
       if (isSupabaseUser) {
-        console.log('🔄 Carregando projetos do Supabase para UUID:', user.id);
+        // Carregando projetos do Supabase
         // Tentar carregar do Supabase primeiro
         const supabaseProjects = await loadProjectsFromSupabase(user.id, user.role);
 
         if (supabaseProjects && supabaseProjects.length > 0) {
           setProjects(supabaseProjects);
-          console.log('Projetos carregados do Supabase:', supabaseProjects.length);
+          // Projetos carregados com sucesso
           return;
         }
       } else {
-        console.log('👤 Usuário local detectado, pulando Supabase');
+        // Usuário local detectado
       }
 
       // Fallback para localStorage
@@ -1354,44 +1337,22 @@ export function ProjectsProvider({ children }) {
       const userId = String(user.id);
       const createdBy = p?.createdBy != null ? String(p.createdBy) : '';
 
-      console.log('🔍 Verificando se usuário pode ver projeto:', {
-        projectId: p?.id,
-        projectName: p?.name,
-        userRole: role,
-        userId,
-        projectCreatedBy: createdBy,
-        projectSource: p?.source,
-        hasMembers: Array.isArray(p?.members),
-        membersCount: Array.isArray(p?.members) ? p.members.length : 0,
-        hasTeam: Array.isArray(p?.team),
-        teamCount: Array.isArray(p?.team) ? p.team.length : 0
-      });
+      // Log removido para evitar poluição do console
 
       if (role === 'admin' || role === 'administrador' || role === 'manager' || role === 'gerente') return true;
       if (createdBy && createdBy === userId) return true;
 
       // Verificar membros do projeto (tanto id quanto user_id) como string
       const members = Array.isArray(p?.members) ? p.members : [];
-      console.log('👥 Verificando membros do projeto:', {
-        projectId: p?.id,
-        membersArray: members,
-        membersLength: members.length,
-        userId,
-        memberIds: members.map(m => ({
-          user_id: m?.user_id,
-          id: m?.id,
-          profiles: m?.profiles
-        }))
-      });
+      // Verificando membros do projeto
       
       if (members.length > 0) {
         const isMember = members.some(m => {
           const mid = m?.user_id != null ? String(m.user_id) : (m?.id != null ? String(m.id) : null);
-          console.log('🔍 Comparando:', { mid, userId, match: mid === userId });
+          // Comparando IDs
           return mid === userId;
         });
         if (isMember) {
-          console.log('✅ Usuário é membro do projeto!');
           return true;
         }
       }

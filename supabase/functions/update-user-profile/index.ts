@@ -88,18 +88,42 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Preparar dados para atualização
+    // Se a senha foi fornecida, atualizar no Supabase Auth usando Service Role
+    if (password !== undefined) {
+      // Criar cliente admin com Service Role Key
+      const supabaseAdmin = createClient(
+        Deno.env.get("SUPABASE_URL") ?? "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      );
+
+      // Atualizar senha no Supabase Auth
+      const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
+        user_id,
+        { password: password }
+      );
+
+      if (authUpdateError) {
+        console.error("Auth password update error:", authUpdateError);
+        return new Response(
+          JSON.stringify({ error: `Erro ao atualizar senha: ${authUpdateError.message}` }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`✅ Senha atualizada no Supabase Auth para usuário ${user_id}`);
+    }
+
+    // Preparar dados para atualização do profile
     const updateData: any = {
       updated_at: new Date().toISOString()
     };
 
     if (role !== undefined) updateData.role = role;
     if (status !== undefined) updateData.status = status;
-    if (password !== undefined) updateData.password = password;
     if (password_reset_at !== undefined) updateData.password_reset_at = password_reset_at;
     if (password_reset_by !== undefined) updateData.password_reset_by = password_reset_by;
 
-    // Atualizar o profile
+    // Atualizar o profile (não incluir password aqui, pois já foi atualizado no Auth)
     const { data, error: updateError } = await supabaseClient
       .from("profiles")
       .update(updateData)

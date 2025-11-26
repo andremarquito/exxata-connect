@@ -7,12 +7,14 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { 
   Building2, Calendar, DollarSign, FileText, MapPin, Users, 
   BarChart3, Clock, CheckCircle, AlertCircle, TrendingUp, Brain, 
   Download, Upload, Search, Zap, Target, Shield, ArrowLeft, Settings, UserPlus, FilePlus2,
   Image, File, Table, Trash2, PieChart, LineChart, Plus, Edit3, Palette, X, GripVertical, Copy, Camera,
-  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown, Eye, Maximize2, Minimize2, Clipboard, Settings as SettingsIcon
+  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown, Eye, Maximize2, Minimize2, Clipboard, Settings as SettingsIcon, Tag
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjects } from '@/contexts/ProjectsContext';
@@ -994,6 +996,18 @@ export function ProjectDetails() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [selectedFileForCategory, setSelectedFileForCategory] = useState(null);
   const [updatingCategory, setUpdatingCategory] = useState(false);
+  
+  // Estados para ações em massa de documentos
+  const [selectedFilesExxata, setSelectedFilesExxata] = useState([]);
+  const [selectedFilesClient, setSelectedFilesClient] = useState([]);
+  const [showBulkCategoryModal, setShowBulkCategoryModal] = useState(false);
+  const [bulkCategorySource, setBulkCategorySource] = useState(null);
+  const [bulkCategoryValue, setBulkCategoryValue] = useState('');
+  const [bulkCategoryConfirmText, setBulkCategoryConfirmText] = useState('');
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleteSource, setBulkDeleteSource] = useState(null);
+  const [bulkDeleteConfirmText, setBulkDeleteConfirmText] = useState('');
+  
   const [conductsLoading, setConductsLoading] = useState(false);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -1811,6 +1825,122 @@ export function ProjectDetails() {
       alert(`Erro ao atualizar categoria: ${error.message || 'Erro desconhecido'}`);
     } finally {
       setUpdatingCategory(false);
+    }
+  };
+
+  // Funções para ações em massa de documentos
+  const handleBulkCategoryChange = (source) => {
+    const selectedFiles = source === 'exxata' ? selectedFilesExxata : selectedFilesClient;
+    if (selectedFiles.length === 0) {
+      alert('Selecione pelo menos um arquivo.');
+      return;
+    }
+    setBulkCategorySource(source);
+    setShowBulkCategoryModal(true);
+  };
+
+  const confirmBulkCategoryChange = async () => {
+    if (!bulkCategoryValue) {
+      alert('Selecione uma categoria.');
+      return;
+    }
+    
+    const selectedFiles = bulkCategorySource === 'exxata' ? selectedFilesExxata : selectedFilesClient;
+    
+    try {
+      setUpdatingCategory(true);
+      
+      // Atualizar categoria de todos os arquivos selecionados
+      for (const fileId of selectedFiles) {
+        await fileService.updateFileCategory(fileId, bulkCategoryValue);
+      }
+      
+      // Recarregar projetos
+      await refreshProjects();
+      
+      // Limpar seleção e fechar modal
+      if (bulkCategorySource === 'exxata') {
+        setSelectedFilesExxata([]);
+      } else {
+        setSelectedFilesClient([]);
+      }
+      
+      setShowBulkCategoryModal(false);
+      setBulkCategorySource(null);
+      setBulkCategoryValue('');
+      setBulkCategoryConfirmText('');
+      
+      alert(`Categoria atualizada para ${selectedFiles.length} arquivo(s) com sucesso!`);
+    } catch (error) {
+      console.error('Erro ao atualizar categorias em massa:', error);
+      alert(`Erro ao atualizar categorias: ${error.message}`);
+    } finally {
+      setUpdatingCategory(false);
+    }
+  };
+
+  const handleBulkDelete = (source) => {
+    const selectedFiles = source === 'exxata' ? selectedFilesExxata : selectedFilesClient;
+    if (selectedFiles.length === 0) {
+      alert('Selecione pelo menos um arquivo.');
+      return;
+    }
+    setBulkDeleteSource(source);
+    setShowBulkDeleteModal(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    const selectedFiles = bulkDeleteSource === 'exxata' ? selectedFilesExxata : selectedFilesClient;
+    
+    try {
+      // Deletar todos os arquivos selecionados
+      for (const fileId of selectedFiles) {
+        await deleteProjectFile(project.id, fileId);
+      }
+      
+      // Limpar seleção e fechar modal
+      if (bulkDeleteSource === 'exxata') {
+        setSelectedFilesExxata([]);
+      } else {
+        setSelectedFilesClient([]);
+      }
+      
+      setShowBulkDeleteModal(false);
+      setBulkDeleteSource(null);
+      setBulkDeleteConfirmText('');
+      
+      alert(`${selectedFiles.length} arquivo(s) excluído(s) com sucesso!`);
+    } catch (error) {
+      console.error('Erro ao excluir arquivos em massa:', error);
+      alert(`Erro ao excluir arquivos: ${error.message}`);
+    }
+  };
+
+  const toggleFileSelection = (fileId, source) => {
+    if (source === 'exxata') {
+      setSelectedFilesExxata(prev => 
+        prev.includes(fileId) ? prev.filter(id => id !== fileId) : [...prev, fileId]
+      );
+    } else {
+      setSelectedFilesClient(prev => 
+        prev.includes(fileId) ? prev.filter(id => id !== fileId) : [...prev, fileId]
+      );
+    }
+  };
+
+  const toggleSelectAllFiles = (files, source) => {
+    if (source === 'exxata') {
+      if (selectedFilesExxata.length === files.length) {
+        setSelectedFilesExxata([]);
+      } else {
+        setSelectedFilesExxata(files.map(f => f.id));
+      }
+    } else {
+      if (selectedFilesClient.length === files.length) {
+        setSelectedFilesClient([]);
+      } else {
+        setSelectedFilesClient(files.map(f => f.id));
+      }
     }
   };
 
@@ -3957,6 +4087,42 @@ export function ProjectDetails() {
                         </div>
                       </div>
 
+                      {/* Barra de ações em massa */}
+                      {!isClientUser && !viewAsClient && exxataFiles.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                          <Checkbox
+                            checked={selectedFilesExxata.length === exxataFiles.length && exxataFiles.length > 0}
+                            onCheckedChange={() => toggleSelectAllFiles(exxataFiles, 'exxata')}
+                          />
+                          <span className="text-sm text-slate-700">
+                            {selectedFilesExxata.length > 0 ? `${selectedFilesExxata.length} selecionado(s)` : 'Selecionar todos'}
+                          </span>
+                          {selectedFilesExxata.length > 0 && (
+                            <>
+                              <div className="h-4 w-px bg-slate-300" />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleBulkCategoryChange('exxata')}
+                                className="gap-2"
+                              >
+                                <Tag className="h-4 w-4" />
+                                Alterar Categoria
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleBulkDelete('exxata')}
+                                className="gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Excluir Selecionados
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      )}
+
                       {/* Upload drag-and-drop + botão */}
                       <div
                         onDragOver={canUploadTo('exxata') ? (e) => { e.preventDefault(); setDragOverSource('exxata'); } : undefined}
@@ -4005,6 +4171,12 @@ export function ProjectDetails() {
                                 {exxataVisible.map((file) => (
                                   <div key={file.id} className="border rounded-lg p-3 flex items-center justify-between">
                                   <div className="flex items-center gap-3 flex-1">
+                                    {!isClientUser && !viewAsClient && (
+                                      <Checkbox
+                                        checked={selectedFilesExxata.includes(file.id)}
+                                        onCheckedChange={() => toggleFileSelection(file.id, 'exxata')}
+                                      />
+                                    )}
                                     <FileKindIcon ext={file.ext} />
                                     <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                                       {(file.ext || 'FILE').toUpperCase()}
@@ -4155,6 +4327,124 @@ export function ProjectDetails() {
                       </Button>
                     )}
                   </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Modal de Alteração em Massa de Categoria */}
+          {showBulkCategoryModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className="w-full max-w-md">
+                <CardHeader>
+                  <CardTitle className="text-orange-600">⚠️ Alterar Categoria em Massa</CardTitle>
+                  <CardDescription>
+                    Você está prestes a alterar a categoria de múltiplos arquivos.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <p className="text-sm font-medium text-orange-900">Detalhes da ação:</p>
+                    <p className="text-sm text-orange-700 mt-1">
+                      • Quantidade: <strong>{(bulkCategorySource === 'exxata' ? selectedFilesExxata : selectedFilesClient).length} arquivo(s)</strong>
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Selecione a nova categoria:</Label>
+                    <Select value={bulkCategoryValue} onValueChange={setBulkCategoryValue}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Escolher categoria..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DOCUMENT_CATEGORIES.map((cat) => (
+                          <SelectItem key={cat.value} value={cat.value}>
+                            {cat.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Digite <strong>"exxata"</strong> para confirmar:</Label>
+                    <Input
+                      type="text"
+                      placeholder="Digite exxata"
+                      value={bulkCategoryConfirmText}
+                      onChange={(e) => setBulkCategoryConfirmText(e.target.value)}
+                      className="border-orange-300 focus:border-orange-500"
+                    />
+                  </div>
+                </CardContent>
+                <CardContent className="flex justify-end space-x-3 border-t pt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setShowBulkCategoryModal(false);
+                      setBulkCategorySource(null);
+                      setBulkCategoryValue('');
+                      setBulkCategoryConfirmText('');
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    onClick={confirmBulkCategoryChange}
+                    className="bg-orange-600 hover:bg-orange-700"
+                    disabled={bulkCategoryConfirmText.toLowerCase() !== 'exxata' || !bulkCategoryValue}
+                  >
+                    Confirmar Alteração
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Modal de Exclusão em Massa */}
+          {showBulkDeleteModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <Card className="w-full max-w-md">
+                <CardHeader>
+                  <CardTitle className="text-red-600">⚠️ Confirmar Exclusão em Massa</CardTitle>
+                  <CardDescription>
+                    Esta ação é irreversível e excluirá permanentemente os arquivos selecionados.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-sm font-medium text-red-900">Você está prestes a excluir:</p>
+                    <p className="text-sm text-red-700 mt-1">
+                      • Quantidade: <strong>{(bulkDeleteSource === 'exxata' ? selectedFilesExxata : selectedFilesClient).length} arquivo(s)</strong>
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Digite <strong>"exxata"</strong> para confirmar:</Label>
+                    <Input
+                      type="text"
+                      placeholder="Digite exxata"
+                      value={bulkDeleteConfirmText}
+                      onChange={(e) => setBulkDeleteConfirmText(e.target.value)}
+                      className="border-red-300 focus:border-red-500"
+                    />
+                  </div>
+                </CardContent>
+                <CardContent className="flex justify-end space-x-3 border-t pt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setShowBulkDeleteModal(false);
+                      setBulkDeleteSource(null);
+                      setBulkDeleteConfirmText('');
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button 
+                    onClick={confirmBulkDelete}
+                    className="bg-red-600 hover:bg-red-700"
+                    disabled={bulkDeleteConfirmText.toLowerCase() !== 'exxata'}
+                  >
+                    Excluir Arquivos
+                  </Button>
                 </CardContent>
               </Card>
             </div>
