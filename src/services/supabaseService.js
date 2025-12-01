@@ -448,7 +448,8 @@ export const activityService = {
           responsible: activityData.assignedTo || activityData.responsible,
           start_date: activityData.startDate || activityData.start_date,
           end_date: activityData.endDate || activityData.end_date,
-          status: activityData.status || 'A Fazer'
+          status: activityData.status || 'A Fazer',
+          is_milestone: activityData.isMilestone || false
         })
         .select()
         .single();
@@ -472,6 +473,7 @@ export const activityService = {
       if (updates.startDate !== undefined) dbUpdates.start_date = updates.startDate;
       if (updates.endDate !== undefined) dbUpdates.end_date = updates.endDate;
       if (updates.status !== undefined) dbUpdates.status = updates.status;
+      if (updates.isMilestone !== undefined) dbUpdates.is_milestone = updates.isMilestone;
 
       const { data, error } = await supabase
         .from('project_activities_old')

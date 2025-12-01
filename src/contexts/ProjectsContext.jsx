@@ -148,6 +148,7 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
             start_date,
             end_date,
             status,
+            is_milestone,
             created_at,
             updated_at
           ),
@@ -209,6 +210,7 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
             start_date,
             end_date,
             status,
+            is_milestone,
             created_at,
             updated_at
           ),
@@ -329,19 +331,34 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
         activities: true,
         indicators: true,
         panorama: true,
+        timeline: true,
         'ai-insights': true
       },
+      tabsConfigClient: project.tabs_config_client || {
+        overview: true,
+        onboarding: true,
+        documents: true,
+        team: true,
+        activities: true,
+        indicators: true,
+        panorama: true,
+        timeline: true,
+        'ai-insights': true
+      },
+      timelineImage: project.timeline_image || null,
       physicalProgressReal: project.physical_progress_real || 0,
       physicalProgressContract: project.physical_progress_contract || 0,
       billingProgressContract: project.billing_progress_contract || 0,
-      activities: (project.project_activities || []).map(act => ({
+      activities: (project.project_activities_old || project.project_activities || []).map(act => ({
         id: act.id,
         seq: act.custom_id || act.id,
+        customId: act.custom_id,
         title: act.name,
         assignedTo: act.responsible,
         status: act.status,
         startDate: act.start_date,
         endDate: act.end_date,
+        isMilestone: act.is_milestone || false,
         description: '',
         createdBy: project.created_by,
         createdAt: act.created_at,
@@ -573,6 +590,14 @@ export function ProjectsProvider({ children }) {
         supabaseData.tabs_config = patch.tabsConfig;
       }
 
+      if (patch.tabsConfigClient !== undefined) {
+        supabaseData.tabs_config_client = patch.tabsConfigClient;
+      }
+
+      if (patch.timelineImage !== undefined) {
+        supabaseData.timeline_image = patch.timelineImage;
+      }
+
       if (patch.contract_value !== undefined) {
         supabaseData.contract_value = patch.contract_value;
       }
@@ -779,7 +804,8 @@ export function ProjectsProvider({ children }) {
         assignedTo: payload.assignedTo,
         startDate: payload.startDate,
         endDate: payload.endDate,
-        status: payload.status || 'A Fazer'
+        status: payload.status || 'A Fazer',
+        isMilestone: payload.isMilestone || false
       });
 
       console.log('✅ Atividade criada:', newActivity);
@@ -798,6 +824,7 @@ export function ProjectsProvider({ children }) {
             startDate: newActivity.start_date,
             endDate: newActivity.end_date,
             status: newActivity.status,
+            isMilestone: newActivity.is_milestone || false,
             createdAt: newActivity.created_at
           }]
         };
@@ -858,7 +885,8 @@ export function ProjectsProvider({ children }) {
                   assignedTo: updatedActivity.responsible,
                   startDate: updatedActivity.start_date,
                   endDate: updatedActivity.end_date,
-                  status: updatedActivity.status
+                  status: updatedActivity.status,
+                  isMilestone: updatedActivity.is_milestone || false
                 }
               : a
           )

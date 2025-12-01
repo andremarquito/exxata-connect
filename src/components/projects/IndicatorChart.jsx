@@ -132,11 +132,47 @@ const IndicatorChart = ({ indicator }) => {
     const dataEntry = { name: label };
     datasets.forEach(dataset => {
       const raw = dataset.values?.[index];
-      const num = typeof raw === 'number' ? raw : Number(raw);
-      dataEntry[dataset.name] = Number.isFinite(num) ? num : 0;
+      // Para gráficos de linha/combo: manter null para interromper a linha
+      // Para outros tipos: converter null para 0
+      if (raw === null || raw === undefined) {
+        if (type === 'line' || type === 'combo') {
+          dataEntry[dataset.name] = null; // Mantém null para interromper linha
+        } else {
+          dataEntry[dataset.name] = 0; // Converte para 0 em barras/pizza
+        }
+      } else {
+        const num = typeof raw === 'number' ? raw : Number(raw);
+        dataEntry[dataset.name] = Number.isFinite(num) ? num : 0;
+      }
     });
     return dataEntry;
   });
+
+  // Para gráficos de linha/combo: remover pontos finais onde todos os datasets são 0 ou null
+  // Isso evita que apareçam pontos em 0 no final (dados futuros)
+  const filteredData = (type === 'line' || type === 'combo') 
+    ? (() => {
+        // Encontrar o último índice com valor real (não-zero e não-null) para cada dataset
+        const lastRealIndex = {};
+        datasets.forEach(ds => {
+          for (let i = data.length - 1; i >= 0; i--) {
+            const val = data[i][ds.name];
+            if (val !== null && val !== undefined && val !== 0) {
+              lastRealIndex[ds.name] = i;
+              break;
+            }
+          }
+        });
+        
+        // Filtrar: manter pontos até o último valor real de cada dataset
+        return data.filter((entry, index) => {
+          return datasets.some(ds => {
+            const lastIdx = lastRealIndex[ds.name];
+            return lastIdx !== undefined && index <= lastIdx;
+          });
+        });
+      })()
+    : data;
 
       if (type === 'bar-horizontal') {
     return (
@@ -195,7 +231,7 @@ const IndicatorChart = ({ indicator }) => {
     return (
       <div style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer>
-          <LineChart data={data} margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
+          <LineChart data={filteredData} margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="name" />
             <YAxis
@@ -205,7 +241,14 @@ const IndicatorChart = ({ indicator }) => {
             <Tooltip content={<CustomTooltip valueFormat={valueFormat} />} />
             <Legend content={<CustomLegend valueFormat={valueFormat} />} />
             {datasets.map((dataset, index) => (
-              <Line key={index} type="monotone" dataKey={dataset.name} stroke={dataset.color || '#8884d8'} activeDot={{ r: 8 }}>
+              <Line 
+                key={index} 
+                type="monotone" 
+                dataKey={dataset.name} 
+                stroke={dataset.color || '#8884d8'} 
+                activeDot={{ r: 8 }}
+                connectNulls={false}
+              >
                 {showDataLabels && (
                   <LabelList dataKey={dataset.name} content={renderLineLabelTop(valueFormat)} />
                 )}
@@ -248,7 +291,7 @@ const IndicatorChart = ({ indicator }) => {
     return (
       <div style={{ width: '100%', height: 300 }}>
         <ResponsiveContainer>
-          <ComposedChart data={data} margin={{ top: 20, right: hasRightAxis ? 80 : 30, left: 80, bottom: 5 }}>
+          <ComposedChart data={filteredData} margin={{ top: 20, right: hasRightAxis ? 80 : 30, left: 80, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="name" />
             
@@ -292,6 +335,7 @@ const IndicatorChart = ({ indicator }) => {
                     stroke={dataset.color || '#8884d8'} 
                     strokeWidth={2}
                     activeDot={{ r: 8 }}
+                    connectNulls={false}
                   >
                     {showDataLabels && (
                       <LabelList dataKey={dataset.name} content={renderLineLabelTop(dsFormat)} />

@@ -14,7 +14,8 @@ import {
   BarChart3, Clock, CheckCircle, AlertCircle, TrendingUp, Brain, 
   Download, Upload, Search, Zap, Target, Shield, ArrowLeft, Settings, UserPlus, FilePlus2,
   Image, File, Table, Trash2, PieChart, LineChart, Plus, Edit3, Palette, X, GripVertical, Copy, Camera,
-  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown, Eye, Maximize2, Minimize2, Clipboard, Settings as SettingsIcon, Tag
+  ChevronUp, ChevronDown, Check, Copy as CopyIcon, MoreVertical, FileDown, Eye, EyeOff, Maximize2, Minimize2, Clipboard, Settings as SettingsIcon, Tag, Flag,
+  ZoomIn, ZoomOut, Maximize, RotateCcw
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjects } from '@/contexts/ProjectsContext';
@@ -26,6 +27,7 @@ import IndicatorsTab from '@/components/projects/IndicatorsTab';
 import IndicatorTemplateSelector from '@/components/projects/IndicatorTemplateSelector';
 import OnboardingTab from '@/components/projects/OnboardingTab';
 import TabsConfigDialog from '@/components/projects/TabsConfigDialog';
+import TimelineTab from '@/components/projects/TimelineTab';
 import IndicatorsPDFExporter from '@/components/pdf/IndicatorsPDFExporter';
 import * as XLSX from 'xlsx';
 
@@ -114,7 +116,9 @@ const parseNumberBR = (value) => {
   }
   
   const parsed = parseFloat(cleaned);
-  return isNaN(parsed) ? 0 : parsed;
+  // Retornar null para valores vazios, permitindo células sem preenchimento
+  // O sistema tratará null como 0 na renderização dos gráficos
+  return isNaN(parsed) ? null : parsed;
 };
 
 // ========== FIM DAS FUNÇÕES AUXILIARES ==========
@@ -163,6 +167,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
   const [labels, setLabels] = useState(indicator?.labels?.join(', ') || '');
   const [valueFormat, setValueFormat] = useState(indicator?.options?.valueFormat || 'number');
   const [observations, setObservations] = useState(indicator?.observations || '');
+  const [cutoffDate, setCutoffDate] = useState(indicator?.cutoff_date || '');
   const [datasets, setDatasets] = useState(() => formatDatasetsForForm(indicator?.datasets));
   const importInputRef = useRef(null);
   const [showDataLabels, setShowDataLabels] = useState(indicator?.options?.showDataLabels ?? true);
@@ -181,6 +186,7 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
     setLabels(Array.isArray(indicator?.labels) ? indicator.labels.join(', ') : (indicator?.labels || ''));
     setValueFormat(indicator?.options?.valueFormat || 'number');
     setObservations(indicator?.observations || '');
+    setCutoffDate(indicator?.cutoff_date || '');
     setShowDataLabels(indicator?.options?.showDataLabels ?? true);
     setLeftAxisMin(indicator?.options?.leftAxis?.min ?? '');
     setLeftAxisMax(indicator?.options?.leftAxis?.max ?? '');
@@ -202,9 +208,9 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
         formattedDatasets[0].values = [...currentValues];
         formattedDatasets[0].colors = [...currentColors];
         
-        // Preencher com valores padrão se necessário
+        // Preencher com valores padrão se necessário (null para células vazias)
         while (formattedDatasets[0].values.length < labelCount) {
-          formattedDatasets[0].values.push(0);
+          formattedDatasets[0].values.push(null);
         }
         while (formattedDatasets[0].colors.length < labelCount) {
           formattedDatasets[0].colors.push('#8884d8');
@@ -233,9 +239,9 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
           newDatasets[0].values = [...currentValues];
           newDatasets[0].colors = [...currentColors];
           
-          // Preencher com valores padrão se necessário
+          // Preencher com valores padrão se necessário (null para células vazias)
           while (newDatasets[0].values.length < labelArray.length) {
-            newDatasets[0].values.push(0);
+            newDatasets[0].values.push(null);
           }
           while (newDatasets[0].colors.length < labelArray.length) {
             newDatasets[0].colors.push('#8884d8');
@@ -264,7 +270,12 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
   const getValuesArray = (ds) => Array.isArray(ds.values)
     ? [...ds.values]
     : (typeof ds.values === 'string'
-      ? ds.values.split(',').map(v => parseFloat(v.trim()) || 0)
+      ? ds.values.split(',').map(v => {
+          const trimmed = v.trim();
+          if (trimmed === '' || trimmed === ' ') return null;
+          const num = parseFloat(trimmed);
+          return isNaN(num) ? null : num;
+        })
       : []);
 
   const labelsArray = labels.split(',').map(l => l.trim()).filter(Boolean);
@@ -301,8 +312,15 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
       const copy = [...prev];
       const ds = { ...copy[dsIdx] };
       const vals = getValuesArray(ds);
-      while (vals.length < Math.max(labelsArray.length, rowIdx + 1)) vals.push(0);
-      vals[rowIdx] = parseFloat(value) || 0;
+      while (vals.length < Math.max(labelsArray.length, rowIdx + 1)) vals.push(null);
+      // Permitir valores vazios (null) ao invés de forçar 0
+      const trimmed = String(value).trim();
+      if (trimmed === '' || trimmed === ' ') {
+        vals[rowIdx] = null;
+      } else {
+        const num = parseFloat(value);
+        vals[rowIdx] = isNaN(num) ? null : num; // Aceita 0 como valor válido
+      }
       ds.values = vals;
       copy[dsIdx] = ds;
       return copy;
@@ -336,10 +354,18 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
       labels: labels.split(',').map(l => l.trim()).filter(Boolean),
       datasets: datasets.map(ds => ({
         ...ds,
-        values: typeof ds.values === 'string' ? ds.values.split(',').map(v => parseFloat(v.trim()) || 0) : Array.isArray(ds.values) ? ds.values : []
+        values: typeof ds.values === 'string' 
+          ? ds.values.split(',').map(v => {
+              const trimmed = v.trim();
+              if (trimmed === '' || trimmed === ' ') return null;
+              const num = parseFloat(trimmed);
+              return isNaN(num) ? null : num;
+            })
+          : Array.isArray(ds.values) ? ds.values : []
       })),
       options,
       observations: observations.trim(),
+      cutoff_date: cutoffDate || null,
     };
   };
 
@@ -729,6 +755,18 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
         />
       </div>
       
+      <div>
+        <label className="block text-sm font-medium mb-1">Data de Corte</label>
+        <input 
+          type="date" 
+          value={cutoffDate} 
+          onChange={(e) => setCutoffDate(e.target.value)} 
+          className="w-full p-2 border rounded" 
+          placeholder="Data de corte dos dados"
+        />
+        <p className="text-xs text-slate-500 mt-1">Indica até quando os dados do indicador são válidos</p>
+      </div>
+      
       <div className="space-y-3">
         <h3 className="font-medium">{(chartType === 'pie' || chartType === 'doughnut') ? 'Cores das Fatias' : 'Conjunto de Dados'}</h3>
         {(chartType === 'pie' || chartType === 'doughnut') ? (
@@ -746,7 +784,14 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
                   value={datasets[0]?.values?.[index] || ''} 
                   onChange={(e) => {
                     const newValues = [...(datasets[0]?.values || [])];
-                    newValues[index] = parseFloat(e.target.value) || 0;
+                    // Permitir valores vazios (null)
+                    const val = e.target.value.trim();
+                    if (val === '' || val === ' ') {
+                      newValues[index] = null;
+                    } else {
+                      const num = parseFloat(val);
+                      newValues[index] = isNaN(num) ? null : num; // Aceita 0 como valor válido
+                    }
                     handleDatasetChange(0, 'values', newValues);
                   }}
                   className="p-2 border rounded text-sm"
@@ -848,7 +893,9 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
                         </td>
                         {datasets.map((ds, dsIdx) => {
                           const vals = getValuesArray(ds);
-                          const val = typeof vals[rowIdx] === 'number' ? vals[rowIdx] : parseFloat(vals[rowIdx]) || 0;
+                          // Permitir valores vazios (null) - não forçar 0
+                          const rawVal = vals[rowIdx];
+                          const val = (rawVal === null || rawVal === undefined) ? '' : rawVal;
                           return (
                             <td key={`${rowIdx}-${dsIdx}`} className="p-2 border">
                               <input
@@ -995,6 +1042,9 @@ export function ProjectDetails() {
   // Modal de categoria
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [selectedFileForCategory, setSelectedFileForCategory] = useState(null);
+  
+  // Estado de upload
+  const [uploadingFiles, setUploadingFiles] = useState([]);
   const [updatingCategory, setUpdatingCategory] = useState(false);
   
   // Estados para ações em massa de documentos
@@ -1034,6 +1084,19 @@ export function ProjectDetails() {
     activities: true,
     indicators: true,
     panorama: true,
+    timeline: true,
+    'ai-insights': true
+  });
+  
+  const [tabsConfigClient, setTabsConfigClient] = useState({
+    overview: true,
+    onboarding: true,
+    documents: true,
+    team: true,
+    activities: true,
+    indicators: true,
+    panorama: true,
+    timeline: true,
     'ai-insights': true
   });
   
@@ -1045,6 +1108,16 @@ export function ProjectDetails() {
   const [activityUser, setActivityUser] = useState('all');
   const [activityStartDate, setActivityStartDate] = useState('');
   const [activityEndDate, setActivityEndDate] = useState('');
+  
+  // Tooltip elegante do Gantt
+  const [ganttTooltip, setGanttTooltip] = useState({ visible: false, x: 0, y: 0, activity: null });
+  
+  // Controles de zoom e navegação do Gantt
+  const [ganttZoom, setGanttZoom] = useState(1); // 1 = 100%, 2 = 200%, etc
+  const [ganttPan, setGanttPan] = useState(0); // Deslocamento em pixels
+  const [isDraggingGantt, setIsDraggingGantt] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const ganttContainerRef = useRef(null);
 
   // Estados para ordenação e edição da tabela
   const [sortField, setSortField] = useState('title');
@@ -1095,6 +1168,10 @@ export function ProjectDetails() {
   const isAdmin = userRole === 'admin' || userRole === 'administrador';
   const isManager = userRole === 'manager' || userRole === 'gerente';
   const isCollaborator = userRole === 'collaborator' || userRole === 'colaborador' || userRole === 'consultor' || userRole === 'consultant';
+  const isClient = userRole === 'client' || userRole === 'cliente';
+  
+  // Determinar qual configuração de abas usar baseado no role do usuário
+  const effectiveTabsConfig = isClient ? tabsConfigClient : tabsConfig;
   
   // Usuários que podem ativar o modo "Visualizar como Cliente"
   const canViewAsClient = isAdmin || isManager || isCollaborator;
@@ -1248,6 +1325,20 @@ export function ProjectDetails() {
       alert('Erro ao duplicar atividade. Tente novamente.');
     }
   };
+  
+  // Função para alternar entre milestone e barra
+  const toggleActivityMilestone = async (activity) => {
+    try {
+      const newIsMilestone = !activity.isMilestone;
+      await updateProjectActivity(project.id, activity.id, { 
+        isMilestone: newIsMilestone 
+      });
+      // O contexto já atualiza o estado local automaticamente
+    } catch (error) {
+      console.error('Erro ao alternar tipo de atividade:', error);
+      alert('Erro ao alternar tipo de atividade. Tente novamente.');
+    }
+  };
 
   const dayMs = 86400000;
   const parseDate = (d) => {
@@ -1286,8 +1377,62 @@ export function ProjectDetails() {
   for (let w = startOfWeek(rangeStart); w <= rangeEnd; w = addDays(w, 7)) {
     weeks.push(new Date(w));
   }
+  
+  // Calcular meses para o cabeçalho do Gantt
+  const months = [];
+  const currentMonth = new Date(rangeStart);
+  currentMonth.setDate(1);
+  while (currentMonth <= rangeEnd) {
+    months.push({
+      date: new Date(currentMonth),
+      month: currentMonth.getMonth(),
+      year: currentMonth.getFullYear()
+    });
+    currentMonth.setMonth(currentMonth.getMonth() + 1);
+  }
   const today = new Date();
   const showToday = today >= rangeStart && today <= rangeEnd;
+  
+  // Funções de controle do Gantt (zoom e pan)
+  const handleGanttZoomIn = () => {
+    setGanttZoom(prev => Math.min(prev + 0.5, 5)); // Máximo 500%
+  };
+  
+  const handleGanttZoomOut = () => {
+    setGanttZoom(prev => Math.max(prev - 0.5, 0.5)); // Mínimo 50%
+  };
+  
+  const handleGanttResetZoom = () => {
+    setGanttZoom(1);
+    setGanttPan(0);
+  };
+  
+  const handleGanttFitToScreen = () => {
+    setGanttZoom(1);
+    setGanttPan(0);
+  };
+  
+  const handleGanttMouseDown = (e) => {
+    if (e.button === 0) { // Botão esquerdo do mouse
+      setIsDraggingGantt(true);
+      setDragStartX(e.clientX - ganttPan);
+      e.preventDefault();
+    }
+  };
+  
+  const handleGanttMouseMove = (e) => {
+    if (isDraggingGantt) {
+      const newPan = e.clientX - dragStartX;
+      // Limitar o pan para não arrastar muito além dos limites
+      const maxPan = (ganttZoom - 1) * 400;
+      setGanttPan(Math.max(-maxPan, Math.min(maxPan, newPan)));
+    }
+  };
+  
+  const handleGanttMouseUp = () => {
+    setIsDraggingGantt(false);
+  };
+  
   // Mapeamento de cores por status (tolerante a variações: "A fazer", "concluído/a", etc.)
   const statusColorClass = (status) => {
     const s = (status || '').toString().trim().toLowerCase();
@@ -1299,7 +1444,7 @@ export function ProjectDetails() {
 
   // Atividades: criar nova (apenas Exxata/admin)
   const [showAddActivity, setShowAddActivity] = useState(false);
-  const [newActivity, setNewActivity] = useState({ customId: '', title: '', assignedTo: '', startDate: '', endDate: '', status: 'A Fazer' });
+  const [newActivity, setNewActivity] = useState({ customId: '', title: '', assignedTo: '', startDate: '', endDate: '', status: 'A Fazer', isMilestone: false });
   const canAddActivities = !viewAsClient && user && !(((user?.role || '').toLowerCase() === 'client') || ((user?.role || '').toLowerCase() === 'cliente'));
 
   const handleCreateActivity = async () => {
@@ -1326,7 +1471,7 @@ export function ProjectDetails() {
       const activityWithId = { ...newActivity, customId };
       await addProjectActivity(project.id, activityWithId);
       setShowAddActivity(false);
-      setNewActivity({ customId: '', title: '', assignedTo: '', startDate: '', endDate: '', status: 'A Fazer' });
+      setNewActivity({ customId: '', title: '', assignedTo: '', startDate: '', endDate: '', status: 'A Fazer', isMilestone: false });
     } catch (e) {
       console.error('Erro ao criar atividade:', e);
       alert('Erro ao criar atividade. Tente novamente.');
@@ -1773,24 +1918,51 @@ export function ProjectDetails() {
     setDragOverSource(null);
     const files = Array.from(e.dataTransfer?.files || []);
     if (files.length) {
-      await Promise.all(files.map((f) => addProjectFile(project.id, f, source)));
+      // Adicionar arquivos à lista de upload
+      const fileInfos = files.map(f => ({ name: f.name, id: Math.random().toString(36) }));
+      setUploadingFiles(prev => [...prev, ...fileInfos]);
+      
+      try {
+        await Promise.all(files.map((f) => addProjectFile(project.id, f, source)));
+        
+        // Remover da lista de upload
+        setUploadingFiles(prev => prev.filter(uf => !fileInfos.find(fi => fi.id === uf.id)));
+      } catch (error) {
+        // Remover da lista em caso de erro
+        setUploadingFiles(prev => prev.filter(uf => !fileInfos.find(fi => fi.id === uf.id)));
+        alert('Erro ao fazer upload. Tente novamente.');
+      }
     }
   };
   const onBrowseInputChange = async (e, source) => {
     const files = Array.from(e.target.files || []);
     if (files.length) {
-      const uploadedFiles = await Promise.all(files.map((f) => addProjectFile(project.id, f, source)));
-      // Após upload, abrir modal de categoria para cada arquivo
-      if (uploadedFiles && uploadedFiles.length > 0) {
-        // Abrir modal para o primeiro arquivo (pode ser expandido para múltiplos)
-        const firstFile = uploadedFiles[0];
-        if (firstFile) {
-          setSelectedFileForCategory(firstFile);
-          setShowCategoryModal(true);
+      // Adicionar arquivos à lista de upload
+      const fileInfos = files.map(f => ({ name: f.name, id: Math.random().toString(36) }));
+      setUploadingFiles(prev => [...prev, ...fileInfos]);
+      
+      try {
+        const uploadedFiles = await Promise.all(files.map((f) => addProjectFile(project.id, f, source)));
+        
+        // Remover da lista de upload
+        setUploadingFiles(prev => prev.filter(uf => !fileInfos.find(fi => fi.id === uf.id)));
+        
+        // Após upload, abrir modal de categoria para cada arquivo
+        if (uploadedFiles && uploadedFiles.length > 0) {
+          // Abrir modal para o primeiro arquivo (pode ser expandido para múltiplos)
+          const firstFile = uploadedFiles[0];
+          if (firstFile) {
+            setSelectedFileForCategory(firstFile);
+            setShowCategoryModal(true);
+          }
         }
+      } catch (error) {
+        // Remover da lista em caso de erro
+        setUploadingFiles(prev => prev.filter(uf => !fileInfos.find(fi => fi.id === uf.id)));
+        alert('Erro ao fazer upload. Tente novamente.');
       }
     }
-    e.target.value = null;
+    e.target.value = '';
   };
 
   // Função para atualizar categoria do arquivo
@@ -2107,13 +2279,37 @@ export function ProjectDetails() {
     if (project?.tabsConfig) {
       setTabsConfig(project.tabsConfig);
     }
-  }, [project?.tabsConfig]);
+    if (project?.tabsConfigClient) {
+      setTabsConfigClient(project.tabsConfigClient);
+    }
+  }, [project?.tabsConfig, project?.tabsConfigClient]);
+  
+  // Gerenciar eventos de mouse para drag do Gantt
+  useEffect(() => {
+    if (isDraggingGantt) {
+      window.addEventListener('mousemove', handleGanttMouseMove);
+      window.addEventListener('mouseup', handleGanttMouseUp);
+      document.body.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
+      
+      return () => {
+        window.removeEventListener('mousemove', handleGanttMouseMove);
+        window.removeEventListener('mouseup', handleGanttMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }
+  }, [isDraggingGantt, handleGanttMouseMove, handleGanttMouseUp]);
 
   // Função para salvar configuração de abas
-  const handleSaveTabsConfig = async (newConfig) => {
+  const handleSaveTabsConfig = async (newConfig, newConfigClient) => {
     try {
-      await updateProjectBackend(project.id, { tabsConfig: newConfig });
+      await updateProjectBackend(project.id, { 
+        tabsConfig: newConfig,
+        tabsConfigClient: newConfigClient
+      });
       setTabsConfig(newConfig);
+      setTabsConfigClient(newConfigClient);
       
       // Se a aba ativa foi ocultada, voltar para o menu
       if (!newConfig[activeTab] && activeTab !== 'preliminary') {
@@ -2589,6 +2785,19 @@ export function ProjectDetails() {
     }
   };
 
+  // Alternar visibilidade do indicador para clientes
+  const toggleIndicatorVisibility = async (indicatorId, currentVisibility) => {
+    try {
+      await updateProjectIndicator(project.id, indicatorId, {
+        visible_to_client: !currentVisibility
+      });
+      // refreshProjects já é chamado automaticamente pelo updateProjectIndicator
+    } catch (error) {
+      console.error('Erro ao atualizar visibilidade:', error);
+      alert('Erro ao atualizar visibilidade do indicador.');
+    }
+  };
+
   // Exportar indicador individual como imagem PNG
   const handleExportIndicatorImage = async (indicatorId, indicatorTitle) => {
     try {
@@ -3010,9 +3219,9 @@ export function ProjectDetails() {
           const ds0 = graph.datasets[0];
           if (!Array.isArray(ds0.colors)) ds0.colors = [];
           while (ds0.colors.length < labelCount) ds0.colors.push('#8884d8');
-          // Garantir que values tenha mesmo tamanho de labels
+          // Garantir que values tenha mesmo tamanho de labels (usar null para valores vazios)
           if (!Array.isArray(ds0.values)) ds0.values = [];
-          while (ds0.values.length < labelCount) ds0.values.push(0);
+          while (ds0.values.length < labelCount) ds0.values.push(null);
         }
       });
 
@@ -3678,14 +3887,15 @@ export function ProjectDetails() {
           <div className="flex items-center gap-3">
             <TabsList>
               <TabsTrigger value="preliminary">Menu</TabsTrigger>
-              {tabsConfig.overview && <TabsTrigger value="overview">Visão Geral</TabsTrigger>}
-              {tabsConfig.onboarding && <TabsTrigger value="onboarding">Onboarding</TabsTrigger>}
-              {tabsConfig.documents && <TabsTrigger value="documents">Documentos</TabsTrigger>}
-              {tabsConfig.team && <TabsTrigger value="team">Equipe</TabsTrigger>}
-              {tabsConfig.activities && <TabsTrigger value="activities">Atividades</TabsTrigger>}
-              {tabsConfig.indicators && <TabsTrigger value="indicators">Indicadores</TabsTrigger>}
-              {tabsConfig.panorama && <TabsTrigger value="panorama">Panorama Atual</TabsTrigger>}
-              {tabsConfig['ai-insights'] && <TabsTrigger value="ai-insights">Inteligência Humana</TabsTrigger>}
+              {effectiveTabsConfig.overview && <TabsTrigger value="overview">Visão Geral</TabsTrigger>}
+              {effectiveTabsConfig.onboarding && <TabsTrigger value="onboarding">Onboarding</TabsTrigger>}
+              {effectiveTabsConfig.documents && <TabsTrigger value="documents">Documentos</TabsTrigger>}
+              {effectiveTabsConfig.team && <TabsTrigger value="team">Equipe</TabsTrigger>}
+              {effectiveTabsConfig.activities && <TabsTrigger value="activities">Atividades</TabsTrigger>}
+              {effectiveTabsConfig.indicators && <TabsTrigger value="indicators">Indicadores</TabsTrigger>}
+              {effectiveTabsConfig.panorama && <TabsTrigger value="panorama">Panorama Atual</TabsTrigger>}
+              {effectiveTabsConfig.timeline && <TabsTrigger value="timeline">Linha do Tempo</TabsTrigger>}
+              {effectiveTabsConfig['ai-insights'] && <TabsTrigger value="ai-insights">Inteligência Humana</TabsTrigger>}
             </TabsList>
             
             {/* Botão de Configuração de Abas (apenas Admin/Gerente) */}
@@ -3730,8 +3940,9 @@ export function ProjectDetails() {
               { key: 'activities', title: 'Atividades', desc: 'Planejamento e andamento das atividades.', icon: <Clock className="h-5 w-5 text-exxata-red" /> },
               { key: 'indicators', title: 'Indicadores', desc: 'Gráficos e métricas do projeto.', icon: <BarChart3 className="h-5 w-5 text-exxata-red" /> },
               { key: 'panorama', title: 'Panorama Atual', desc: 'Situação técnica, física e econômica.', icon: <Shield className="h-5 w-5 text-exxata-red" /> },
+              { key: 'timeline', title: 'Linha do Tempo', desc: 'Visualização cronológica de eventos e marcos.', icon: <Calendar className="h-5 w-5 text-exxata-red" /> },
               { key: 'ai-insights', title: 'Inteligência Humana', desc: 'Análises e percepções do time.', icon: <Brain className="h-5 w-5 text-exxata-red" /> },
-            ].filter(sec => tabsConfig[sec.key]).map(sec => (
+            ].filter(sec => effectiveTabsConfig[sec.key]).map(sec => (
               <Card key={sec.key} className="cursor-pointer hover:shadow-md transition" onClick={() => setActiveTab(sec.key)}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -3744,7 +3955,7 @@ export function ProjectDetails() {
             ))}
             
             {/* Card de Exportar Relatório PDF */}
-            {tabsConfig.indicators && (
+            {effectiveTabsConfig.indicators && (
               <Card className="cursor-pointer hover:shadow-md transition border-exxata-red/20">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -3851,7 +4062,15 @@ export function ProjectDetails() {
                   </CardContent>
                 </Card>
               )}
-              {project.project_indicators.map(indicator => (
+              {project.project_indicators
+                .filter(indicator => {
+                  // Se estiver no modo "Visualizar como Cliente", ocultar indicadores não visíveis
+                  if (viewAsClient && indicator.visible_to_client === false) {
+                    return false;
+                  }
+                  return true;
+                })
+                .map(indicator => (
                 <div
                   key={indicator.id}
                   draggable={isEditingIndicators}
@@ -3905,6 +4124,19 @@ export function ProjectDetails() {
                               >
                                 <Camera className="h-4 w-4" />
                               </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                onClick={() => toggleIndicatorVisibility(indicator.id, indicator.visible_to_client ?? true)}
+                                title={indicator.visible_to_client !== false ? "Visível para clientes (clique para ocultar)" : "Oculto para clientes (clique para mostrar)"}
+                                className={indicator.visible_to_client === false ? "text-slate-400" : "text-slate-700"}
+                              >
+                                {indicator.visible_to_client !== false ? (
+                                  <Eye className="h-4 w-4" />
+                                ) : (
+                                  <EyeOff className="h-4 w-4" />
+                                )}
+                              </Button>
                               <Button variant="ghost" size="icon" onClick={() => { setEditingIndicator(indicator); setShowIndicatorModal(true); }}>
                                 <Edit3 className="h-4 w-4" />
                               </Button>
@@ -3931,6 +4163,12 @@ export function ProjectDetails() {
                               <p className="text-sm text-slate-600 whitespace-pre-wrap">{indicator.observations}</p>
                             </div>
                           </div>
+                        </div>
+                      )}
+                      {indicator.cutoff_date && (
+                        <div className="mt-2 flex items-center justify-end gap-2 text-xs text-slate-500">
+                          <Calendar className="h-3.5 w-3.5" />
+                          <span>Dados até {new Date(indicator.cutoff_date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                         </div>
                       )}
                     </CardContent>
@@ -4659,9 +4897,22 @@ export function ProjectDetails() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="mt-3 flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setShowAddActivity(false)}>Cancelar</Button>
-                    <Button className="bg-exxata-red hover:bg-red-700 text-white" onClick={handleCreateActivity}>Salvar</Button>
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Checkbox 
+                        id="milestone-checkbox"
+                        checked={newActivity.isMilestone}
+                        onCheckedChange={(checked) => setNewActivity(a => ({ ...a, isMilestone: checked }))}
+                      />
+                      <Label htmlFor="milestone-checkbox" className="text-sm font-medium flex items-center gap-1 cursor-pointer">
+                        <Flag className="h-4 w-4 text-exxata-red" />
+                        Marco (exibir como bandeira no Gantt)
+                      </Label>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setShowAddActivity(false)}>Cancelar</Button>
+                      <Button className="bg-exxata-red hover:bg-red-700 text-white" onClick={handleCreateActivity}>Salvar</Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -4782,11 +5033,17 @@ export function ProjectDetails() {
                               </div>
                             ) : (
                               <div 
-                                className="truncate cursor-pointer hover:bg-slate-50 p-1 rounded"
+                                className="cursor-pointer hover:bg-slate-50 p-1 rounded"
                                 title={`${a.title} (clique para editar)`}
                                 onClick={() => canEdit && startEditing(a, 'title')}
                               >
-                                {a.title}
+                                <div className="flex items-center gap-1.5">
+                                  {a.isMilestone && <Flag className="h-3.5 w-3.5 text-exxata-red flex-shrink-0" />}
+                                  <span className="font-medium text-sm">{a.title}</span>
+                                </div>
+                                <div className="text-xs text-slate-500 mt-0.5">
+                                  {new Date(a.startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                </div>
                               </div>
                             )}
                           </div>
@@ -4910,6 +5167,19 @@ export function ProjectDetails() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  className={`h-6 w-6 ${a.isMilestone ? 'text-exxata-red hover:bg-red-50' : 'text-slate-600 hover:bg-slate-50'}`}
+                                  title={a.isMilestone ? 'Converter para barra' : 'Converter para marco'}
+                                  onClick={() => toggleActivityMilestone(a)}
+                                >
+                                  {a.isMilestone ? (
+                                    <Flag className="h-3 w-3" />
+                                  ) : (
+                                    <BarChart3 className="h-3 w-3" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
                                   className="h-6 w-6 text-blue-600 hover:bg-blue-50"
                                   title="Duplicar atividade"
                                   onClick={() => duplicateActivity(a)}
@@ -4939,19 +5209,157 @@ export function ProjectDetails() {
                 </div>
 
                 {/* Gantt alinhado */}
-                <div>
+                <div className="space-y-2">
+                  {/* Controles de Zoom e Navegação */}
+                  <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg p-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-slate-600">Controles do Gantt:</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGanttZoomIn}
+                        className="h-7 px-2"
+                        title="Aumentar zoom"
+                      >
+                        <ZoomIn className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGanttZoomOut}
+                        className="h-7 px-2"
+                        title="Diminuir zoom"
+                      >
+                        <ZoomOut className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGanttFitToScreen}
+                        className="h-7 px-2"
+                        title="Ajustar à tela"
+                      >
+                        <Maximize className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGanttResetZoom}
+                        className="h-7 px-2"
+                        title="Resetar zoom"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500">
+                        Zoom: {Math.round(ganttZoom * 100)}%
+                      </span>
+                      <span className="text-xs text-slate-400">|</span>
+                      <span className="text-xs text-slate-500">
+                        💡 Arraste horizontalmente para navegar
+                      </span>
+                    </div>
+                  </div>
+                  
                   <div
-                    className="relative border border-slate-200 rounded-lg p-4 overflow-hidden"
-                    style={{ height: `${(sortedActivities.length || 1) * 44 + 56}px` }}
+                    ref={ganttContainerRef}
+                    className="relative border border-slate-200 rounded-lg overflow-hidden select-none"
+                    style={{ 
+                      height: `${(sortedActivities.length || 1) * 44 + 88}px`,
+                      cursor: isDraggingGantt ? 'grabbing' : 'grab'
+                    }}
+                    onMouseDown={handleGanttMouseDown}
                   >
+                    {/* Wrapper com zoom e pan aplicados */}
+                    <div 
+                      className="absolute inset-0 transition-transform duration-100"
+                      style={{
+                        transform: `scaleX(${ganttZoom}) translateX(${ganttPan}px)`,
+                        transformOrigin: 'left center'
+                      }}
+                    >
+                    {/* Cabeçalho elegante com meses e ano */}
+                    <div className="absolute left-0 right-0 top-0 h-16 bg-gradient-to-b from-slate-50 to-white border-b border-slate-200">
+                      {/* Linha de anos */}
+                      <div className="absolute left-0 right-0 top-0 h-6 flex items-center px-4">
+                        {(() => {
+                          const yearGroups = [];
+                          let currentYear = null;
+                          let yearStart = 0;
+                          
+                          months.forEach((m, idx) => {
+                            if (m.year !== currentYear) {
+                              if (currentYear !== null) {
+                                yearGroups.push({ year: currentYear, start: yearStart, end: idx });
+                              }
+                              currentYear = m.year;
+                              yearStart = idx;
+                            }
+                          });
+                          if (currentYear !== null) {
+                            yearGroups.push({ year: currentYear, start: yearStart, end: months.length });
+                          }
+                          
+                          return yearGroups.map((yg, idx) => {
+                            const monthsInYear = yg.end - yg.start;
+                            const firstMonthDate = months[yg.start].date;
+                            const lastMonthDate = new Date(months[yg.end - 1].date);
+                            lastMonthDate.setMonth(lastMonthDate.getMonth() + 1);
+                            lastMonthDate.setDate(0);
+                            
+                            const startPos = Math.max(0, ((firstMonthDate - rangeStart) / dayMs) / totalDays * 100);
+                            const endPos = Math.min(100, ((lastMonthDate - rangeStart) / dayMs) / totalDays * 100);
+                            const width = endPos - startPos;
+                            
+                            return (
+                              <div
+                                key={`year-${idx}`}
+                                className="absolute h-6 flex items-center justify-center text-sm font-bold text-slate-700 border-r border-slate-200"
+                                style={{ left: `${startPos}%`, width: `${width}%` }}
+                              >
+                                {yg.year}
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                      
+                      {/* Linha de meses */}
+                      <div className="absolute left-0 right-0 top-6 h-10 flex items-center px-4">
+                        {months.map((m, idx) => {
+                          const monthStart = m.date;
+                          const monthEnd = new Date(m.date);
+                          monthEnd.setMonth(monthEnd.getMonth() + 1);
+                          monthEnd.setDate(0);
+                          
+                          const startPos = Math.max(0, ((monthStart - rangeStart) / dayMs) / totalDays * 100);
+                          const endPos = Math.min(100, ((monthEnd - rangeStart) / dayMs) / totalDays * 100);
+                          const width = endPos - startPos;
+                          
+                          const monthNames = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+                          
+                          return (
+                            <div
+                              key={`month-${idx}`}
+                              className="absolute h-10 flex items-center justify-center text-xs font-medium text-slate-600 border-r border-slate-200 bg-white/50"
+                              style={{ left: `${startPos}%`, width: `${width}%` }}
+                            >
+                              {monthNames[m.month]}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     {/* Week grid */}
-                    <div className="absolute left-0 right-0 top-6 bottom-4">
+                    <div className="absolute left-0 right-0 top-16 bottom-4 px-4">
                       {weeks.map((w, idx) => {
                         const left = Math.max(0, Math.min(100, (((w - rangeStart) / dayMs) / totalDays) * 100));
                         return (
                           <div
                             key={`grid-${idx}`}
-                            className="absolute top-0 bottom-0 border-l border-slate-200"
+                            className="absolute top-0 bottom-0 border-l border-slate-100"
                             style={{ left: `${left}%` }}
                           />
                         );
@@ -4964,45 +5372,157 @@ export function ProjectDetails() {
                       )}
                     </div>
 
-                    {/* Week labels */}
-                    <div className="absolute left-0 right-0 top-0 h-6 text-[11px] text-slate-500">
-                      {weeks.map((w, idx) => {
-                        const left = Math.max(0, Math.min(100, (((w - rangeStart) / dayMs) / totalDays) * 100));
+                    {/* Bars e Marcos alinhados à ordem da tabela */}
+                    <div className="absolute left-0 right-0 top-16 bottom-0 px-4">
+                      {sortedActivities.map((a, i) => {
+                        const offDays = Math.max(0, Math.floor((parseDate(a.startDate) - rangeStart) / dayMs));
+                        const durDays = Math.max(1, Math.floor((parseDate(a.endDate) - parseDate(a.startDate)) / dayMs) + 1);
+                        const left = (offDays / totalDays) * 100;
+                        const width = (durDays / totalDays) * 100;
+                        
                         return (
-                          <div key={`label-${idx}`} className="absolute -translate-x-1/2" style={{ left: `${left}%` }}>
-                            {w.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                          <div
+                            key={a.id}
+                            className="absolute left-0 right-0"
+                            style={{ top: `${i * 44 + 12}px`, height: '36px' }}
+                          >
+                            {a.isMilestone ? (
+                              // Renderizar como losango para marcos
+                              <div
+                                className="absolute flex items-center justify-center cursor-pointer transition-transform hover:scale-110"
+                                style={{ left: `${left}%`, top: '6px' }}
+                                onMouseEnter={(e) => {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setGanttTooltip({
+                                    visible: true,
+                                    x: rect.left + rect.width / 2,
+                                    y: rect.top - 10,
+                                    activity: a
+                                  });
+                                }}
+                                onMouseLeave={() => setGanttTooltip({ visible: false, x: 0, y: 0, activity: null })}
+                              >
+                                {/* Losango simples */}
+                                <div 
+                                  className={`w-3 h-3 ${statusColorClass(a.status)} shadow-sm`}
+                                  style={{ transform: 'rotate(45deg)' }}
+                                />
+                              </div>
+                            ) : (
+                              // Renderizar como barra para atividades normais
+                              <div
+                                className={`absolute h-3 rounded-md shadow-sm cursor-pointer transition-all hover:h-4 hover:-translate-y-0.5 ${statusColorClass(a.status)}`}
+                                style={{ left: `${left}%`, width: `${width}%`, top: '8px' }}
+                                onMouseEnter={(e) => {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setGanttTooltip({
+                                    visible: true,
+                                    x: rect.left + rect.width / 2,
+                                    y: rect.top - 10,
+                                    activity: a
+                                  });
+                                }}
+                                onMouseLeave={() => setGanttTooltip({ visible: false, x: 0, y: 0, activity: null })}
+                              />
+                            )}
                           </div>
                         );
                       })}
                     </div>
-
-                    {/* Bars alinhadas à ordem da tabela */}
-                    {sortedActivities.map((a, i) => {
-                      const offDays = Math.max(0, Math.floor((parseDate(a.startDate) - rangeStart) / dayMs));
-                      const durDays = Math.max(1, Math.floor((parseDate(a.endDate) - parseDate(a.startDate)) / dayMs) + 1);
-                      const left = (offDays / totalDays) * 100;
-                      const width = (durDays / totalDays) * 100;
-                      return (
-                        <div
-                          key={a.id}
-                          className="absolute left-0 right-0"
-                          style={{ top: `${i * 44 + 40}px`, height: '36px' }}
-                        >
-                          <div
-                            className={`absolute h-2 rounded ${statusColorClass(a.status)}`}
-                            style={{ left: `${left}%`, width: `${width}%`, top: '8px' }}
-                            title={`${a.title} • ${a.assignedTo}`}
-                          />
-                        </div>
-                      );
-                    })}
+                    </div>
+                    {/* Fim do wrapper com zoom e pan */}
                   </div>
                 </div>
+                
+                {/* Tooltip Elegante do Gantt */}
+                {ganttTooltip.visible && ganttTooltip.activity && (
+                  <div
+                    className="fixed z-50 pointer-events-none"
+                    style={{
+                      left: `${ganttTooltip.x}px`,
+                      top: `${ganttTooltip.y}px`,
+                      transform: 'translate(-50%, -100%)'
+                    }}
+                  >
+                    <div className="bg-white border-2 border-slate-200 rounded-lg shadow-xl p-3 min-w-[240px] animate-in fade-in slide-in-from-bottom-2 duration-200">
+                      {/* Título com ícone de marco se aplicável */}
+                      <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-200">
+                        {ganttTooltip.activity.isMilestone && (
+                          <div className="w-2.5 h-2.5 bg-exxata-red transform rotate-45" />
+                        )}
+                        <span className="font-semibold text-sm leading-tight text-slate-800">
+                          {ganttTooltip.activity.title}
+                        </span>
+                      </div>
+                      
+                      {/* Informações */}
+                      <div className="space-y-1.5 text-xs">
+                        {/* Período */}
+                        <div className="flex items-start gap-2">
+                          <Calendar className="h-3.5 w-3.5 text-slate-500 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <div className="text-slate-500 font-medium">Período</div>
+                            <div className="font-semibold text-slate-700">
+                              {new Date(ganttTooltip.activity.startDate).toLocaleDateString('pt-BR', { 
+                                day: '2-digit', 
+                                month: 'short', 
+                                year: 'numeric' 
+                              })}
+                              {' → '}
+                              {new Date(ganttTooltip.activity.endDate).toLocaleDateString('pt-BR', { 
+                                day: '2-digit', 
+                                month: 'short', 
+                                year: 'numeric' 
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Responsável */}
+                        <div className="flex items-start gap-2">
+                          <Users className="h-3.5 w-3.5 text-slate-500 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <div className="text-slate-500 font-medium">Responsável</div>
+                            <div className="font-semibold text-slate-700">{ganttTooltip.activity.assignedTo || 'Não atribuído'}</div>
+                          </div>
+                        </div>
+                        
+                        {/* Status */}
+                        <div className="flex items-start gap-2">
+                          <div className={`h-3.5 w-3.5 rounded-full mt-0.5 flex-shrink-0 ${statusColorClass(ganttTooltip.activity.status)}`} />
+                          <div>
+                            <div className="text-slate-500 font-medium">Status</div>
+                            <div className="font-semibold text-slate-700">{ganttTooltip.activity.status}</div>
+                          </div>
+                        </div>
+                        
+                        {/* Tipo */}
+                        {ganttTooltip.activity.isMilestone && (
+                          <div className="flex items-start gap-2 pt-1 mt-1 border-t border-slate-200">
+                            <div className="text-exxata-red font-semibold text-xs">
+                              ◆ Marco do Projeto
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Seta do tooltip */}
+                      <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-full">
+                        <div className="w-0 h-0 border-l-[6px] border-l-transparent border-t-[6px] border-t-white border-r-[6px] border-r-transparent" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 flex-wrap">
                     <div className="flex items-center gap-2"><span className="h-2 w-4 rounded bg-slate-400 inline-block"/> A Fazer</div>
                     <div className="flex items-center gap-2"><span className="h-2 w-4 rounded bg-blue-600 inline-block"/> Em Progresso</div>
                     <div className="flex items-center gap-2"><span className="h-2 w-4 rounded bg-green-600 inline-block"/> Concluída</div>
+                    <div className="flex items-center gap-2 ml-2 pl-2 border-l border-slate-300">
+                      <div className="w-2.5 h-2.5 bg-exxata-red transform rotate-45" />
+                      <span className="text-sm text-slate-600">Marco</span>
+                    </div>
                   </div>
                   <div className="text-slate-500">Linha vermelha: hoje</div>
                 </div>
@@ -5117,6 +5637,15 @@ export function ProjectDetails() {
               );
             })}
           </div>
+        </TabsContent>
+
+        {/* LINHA DO TEMPO */}
+        <TabsContent value="timeline" className="pl-4 pb-8">
+          <TimelineTab
+            project={project}
+            canEdit={canEdit}
+            onUpdate={(updates) => updateProjectBackend(project.id, updates)}
+          />
         </TabsContent>
 
         <TabsContent value="ai-insights" className="pl-4 pb-8">
@@ -5320,8 +5849,38 @@ export function ProjectDetails() {
         open={showTabsConfig}
         onOpenChange={setShowTabsConfig}
         currentConfig={tabsConfig}
+        currentConfigClient={tabsConfigClient}
         onSave={handleSaveTabsConfig}
       />
+
+      {/* Toast de Upload - Canto inferior direito */}
+      {uploadingFiles.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-50 space-y-2">
+          {uploadingFiles.map((file) => (
+            <div
+              key={file.id}
+              className="bg-white border border-slate-200 rounded-lg shadow-lg p-4 min-w-[300px] animate-in slide-in-from-bottom-5 fade-in duration-300"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0">
+                  <svg className="animate-spin h-5 w-5 text-exxata-red" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">
+                    {file.name}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Enviando documento...
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

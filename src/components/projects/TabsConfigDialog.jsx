@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { 
   TrendingUp, Clipboard, FileText, Users, Clock, 
-  BarChart3, Shield, Brain, AlertCircle 
+  BarChart3, Shield, Brain, AlertCircle, Calendar 
 } from 'lucide-react';
 
 const TABS_INFO = [
@@ -52,6 +52,12 @@ const TABS_INFO = [
     description: 'Situação técnica, física e econômica' 
   },
   { 
+    key: 'timeline', 
+    title: 'Linha do Tempo', 
+    icon: Calendar, 
+    description: 'Visualização cronológica de eventos e marcos' 
+  },
+  { 
     key: 'ai-insights', 
     title: 'Inteligência Humana', 
     icon: Brain, 
@@ -59,21 +65,39 @@ const TABS_INFO = [
   },
 ];
 
-export default function TabsConfigDialog({ open, onOpenChange, currentConfig, onSave }) {
+export default function TabsConfigDialog({ open, onOpenChange, currentConfig, currentConfigClient, onSave }) {
   const [config, setConfig] = useState(currentConfig);
+  const [configClient, setConfigClient] = useState(currentConfigClient);
   const [isSaving, setIsSaving] = useState(false);
 
   // Sincronizar config quando o modal abrir ou currentConfig mudar
   useEffect(() => {
     if (open) {
-      console.log('📂 Modal aberto, config atual:', currentConfig);
+      console.log('📂 Modal aberto, config atual:', currentConfig, 'config cliente:', currentConfigClient);
       setConfig(currentConfig);
+      setConfigClient(currentConfigClient);
     }
-  }, [open, currentConfig]);
+  }, [open, currentConfig, currentConfigClient]);
 
   const handleToggle = (tabKey) => {
     console.log('🔄 Toggling tab:', tabKey, 'Current:', config[tabKey], 'New:', !config[tabKey]);
     setConfig(prev => ({
+      ...prev,
+      [tabKey]: !prev[tabKey]
+    }));
+    
+    // Se ocultar para todos, também ocultar para clientes
+    if (config[tabKey]) {
+      setConfigClient(prev => ({
+        ...prev,
+        [tabKey]: false
+      }));
+    }
+  };
+
+  const handleToggleClient = (tabKey) => {
+    console.log('🔄 Toggling tab para cliente:', tabKey, 'Current:', configClient[tabKey], 'New:', !configClient[tabKey]);
+    setConfigClient(prev => ({
       ...prev,
       [tabKey]: !prev[tabKey]
     }));
@@ -82,7 +106,7 @@ export default function TabsConfigDialog({ open, onOpenChange, currentConfig, on
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await onSave(config);
+      await onSave(config, configClient);
       onOpenChange(false);
     } catch (error) {
       console.error('Erro ao salvar configuração:', error);
@@ -94,6 +118,7 @@ export default function TabsConfigDialog({ open, onOpenChange, currentConfig, on
 
   const handleCancel = () => {
     setConfig(currentConfig); // Resetar para configuração original
+    setConfigClient(currentConfigClient);
     onOpenChange(false);
   };
 
@@ -107,7 +132,7 @@ export default function TabsConfigDialog({ open, onOpenChange, currentConfig, on
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Configurar Abas Visíveis</DialogTitle>
           <DialogDescription>
-            Escolha quais abas serão exibidas neste projeto. As alterações afetam todos os usuários do projeto.
+            Escolha quais abas serão exibidas neste projeto. Você pode ocultar abas para todos os usuários ou apenas para clientes.
           </DialogDescription>
         </DialogHeader>
 
@@ -124,63 +149,94 @@ export default function TabsConfigDialog({ open, onOpenChange, currentConfig, on
           {TABS_INFO.map((tab) => {
             const Icon = tab.icon;
             const isEnabled = config[tab.key];
+            const isEnabledForClient = configClient[tab.key];
             const isRequired = tab.required;
 
             return (
               <div
                 key={tab.key}
-                className={`flex items-center justify-between p-4 border rounded-lg transition-colors relative ${
+                className={`p-4 border rounded-lg transition-colors ${
                   isEnabled 
                     ? 'bg-white border-gray-200' 
                     : 'bg-gray-50 border-gray-100'
                 }`}
               >
-                <div className="flex items-center gap-3 flex-1">
-                  <div className={`p-2 rounded-lg ${
-                    isEnabled 
-                      ? 'bg-exxata-red/10' 
-                      : 'bg-gray-200'
-                  }`}>
-                    <Icon className={`h-5 w-5 ${
+                {/* Header da aba */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className={`p-2 rounded-lg ${
                       isEnabled 
-                        ? 'text-exxata-red' 
-                        : 'text-gray-400'
-                    }`} />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className={`font-semibold ${
-                        isEnabled ? 'text-gray-900' : 'text-gray-500'
-                      }`}>
-                        {tab.title}
-                      </h4>
-                      {isRequired && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
-                          Obrigatória
-                        </span>
-                      )}
-                    </div>
-                    <p className={`text-sm ${
-                      isEnabled ? 'text-gray-600' : 'text-gray-400'
+                        ? 'bg-exxata-red/10' 
+                        : 'bg-gray-200'
                     }`}>
-                      {tab.description}
-                    </p>
+                      <Icon className={`h-5 w-5 ${
+                        isEnabled 
+                          ? 'text-exxata-red' 
+                          : 'text-gray-400'
+                      }`} />
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className={`font-semibold ${
+                          isEnabled ? 'text-gray-900' : 'text-gray-500'
+                        }`}>
+                          {tab.title}
+                        </h4>
+                        {isRequired && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                            Obrigatória
+                          </span>
+                        )}
+                      </div>
+                      <p className={`text-sm ${
+                        isEnabled ? 'text-gray-600' : 'text-gray-400'
+                      }`}>
+                        {tab.description}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="ml-4 flex items-center shrink-0">
+                    <Switch
+                      checked={isEnabled}
+                      onCheckedChange={() => !isRequired && handleToggle(tab.key)}
+                      disabled={isRequired || isSaving}
+                      className="relative z-10"
+                      style={{
+                        backgroundColor: isEnabled ? '#d51d07' : '#d1d5db',
+                        minWidth: '44px',
+                        minHeight: '24px',
+                      }}
+                    />
                   </div>
                 </div>
-                
-                <div className="ml-4 flex items-center shrink-0">
-                  <Switch
-                    checked={isEnabled}
-                    onCheckedChange={() => !isRequired && handleToggle(tab.key)}
-                    disabled={isRequired || isSaving}
-                    className="relative z-10"
-                    style={{
-                      backgroundColor: isEnabled ? '#d51d07' : '#d1d5db',
-                      minWidth: '44px',
-                      minHeight: '24px',
-                    }}
-                  />
-                </div>
+
+                {/* Opção adicional: Ocultar apenas para clientes */}
+                {isEnabled && !isRequired && (
+                  <div className="ml-11 pl-4 border-l-2 border-gray-200">
+                    <div className="flex items-center justify-between py-2">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-700">
+                          Visível para clientes
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Desative para ocultar esta aba apenas para usuários com perfil Cliente
+                        </p>
+                      </div>
+                      <Switch
+                        checked={isEnabledForClient}
+                        onCheckedChange={() => handleToggleClient(tab.key)}
+                        disabled={isSaving}
+                        className="relative z-10 ml-3"
+                        style={{
+                          backgroundColor: isEnabledForClient ? '#10b981' : '#d1d5db',
+                          minWidth: '44px',
+                          minHeight: '24px',
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
