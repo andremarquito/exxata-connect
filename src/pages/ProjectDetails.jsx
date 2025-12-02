@@ -30,6 +30,7 @@ import TabsConfigDialog from '@/components/projects/TabsConfigDialog';
 import TimelineTab from '@/components/projects/TimelineTab';
 import IndicatorsPDFExporter from '@/components/pdf/IndicatorsPDFExporter';
 import * as XLSX from 'xlsx';
+import html2canvas from 'html2canvas';
 
 // ========== FUNÇÕES AUXILIARES GLOBAIS PARA IMPORTAÇÃO ==========
 
@@ -385,29 +386,180 @@ const IndicatorModalForm = ({ project, indicator, onClose, onSave }) => {
   const handleExport = () => {
     try {
       const data = buildFormData();
-      const exportRow = {
-        'Título': data.title,
-        'Tipo de Gráfico': data.chart_type,
-        'Formato de Valor': data.options?.valueFormat === 'currency' ? 'Monetário BRL' : data.options?.valueFormat === 'currency-usd' ? 'Monetário USD' : data.options?.valueFormat === 'percentage' ? 'Percentual' : 'Numérico',
-        'Rótulos': data.labels.join(', '),
-        'Conjunto de Dados': data.datasets.map(ds => `${ds.name}: ${ds.values.join(', ')}`).join(' | '),
-        'Cores': (data.chart_type === 'pie' || data.chart_type === 'doughnut')
-          ? (data.datasets[0]?.colors?.join(', ') || '')
-          : data.datasets.map(ds => ds.color).join(', '),
-      };
-
+      
+      // Criar workbook
       const wb = XLSX.utils.book_new();
-      const ws = XLSX.utils.json_to_sheet([exportRow]);
-      ws['!cols'] = [
-        { wch: 30 },
-        { wch: 18 },
-        { wch: 40 },
-        { wch: 60 },
-        { wch: 30 },
+
+      // ===== ABA 1: CONFIGURAÇÕES =====
+      const configData = [{
+        'ID': 'G1',
+        'Título': data.title,
+        'Tipo': data.chart_type || 'bar',
+        'Formato': data.options?.valueFormat || 'number',
+        'Tamanho': '1 coluna',
+        'Ordem': 0
+      }];
+
+      const wsConfig = XLSX.utils.json_to_sheet(configData);
+      wsConfig['!cols'] = [
+        { wch: 8 },  // ID
+        { wch: 40 }, // Título
+        { wch: 15 }, // Tipo
+        { wch: 15 }, // Formato
+        { wch: 12 }, // Tamanho
+        { wch: 8 }   // Ordem
       ];
-      XLSX.utils.book_append_sheet(wb, ws, 'Indicador');
+      XLSX.utils.book_append_sheet(wb, wsConfig, 'Configurações');
+
+      // ===== ABA 2: DADOS =====
+      const dataRows = [];
+      const graphId = 'G1';
+      const labels = Array.isArray(data.labels) ? data.labels : [];
+      const datasets = Array.isArray(data.datasets) ? data.datasets : [];
+
+      datasets.forEach(dataset => {
+        const row = {
+          'ID_Gráfico': graphId,
+          'Dataset': dataset.name || 'Série 1'
+        };
+        
+        // Adicionar valores para cada rótulo
+        labels.forEach((label, labelIndex) => {
+          const value = dataset.values?.[labelIndex];
+          row[label] = value !== undefined && value !== null ? value : '';
+        });
+
+        dataRows.push(row);
+      });
+
+      const wsData = XLSX.utils.json_to_sheet(dataRows);
+      
+      // Formatar células numéricas com separador decimal brasileiro
+      const range = XLSX.utils.decode_range(wsData['!ref']);
+      for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+        for (let C = range.s.c + 2; C <= range.e.c; ++C) { // Começar da coluna 2 (após ID_Gráfico e Dataset)
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = wsData[cellAddress];
+          if (cell && typeof cell.v === 'number') {
+            // Formato brasileiro: vírgula para decimal
+            cell.z = '0.00';
+            // Converter o valor para string formatada em pt-BR
+            cell.w = new Intl.NumberFormat('pt-BR', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2
+            }).format(cell.v);
+          }
+        }
+      }
+      
+      // Largura dinâmica baseada no número de colunas
+      const dataColWidths = [
+        { wch: 12 }, // ID_Gráfico
+        { wch: 20 }, // Dataset
+        ...Array(labels.length).fill({ wch: 15 })
+      ];
+      wsData['!cols'] = dataColWidths;
+      XLSX.utils.book_append_sheet(wb, wsData, 'Dados');
+
+      // ===== ABA 3: CORES =====
+      const colorRows = [];
+
+      datasets.forEach(dataset => {
+        // Para pizza/rosca exportar cores por fatia (uma linha por rótulo)
+        if ((data.chart_type === 'pie' || data.chart_type === 'doughnut') && Array.isArray(labels)) {
+          const sliceColors = Array.isArray(dataset.colors) ? dataset.colors : [];
+          labels.forEach((label, i) => {
+            colorRows.push({
+              'ID_Gráfico': graphId,
+              'Dataset': dataset.name || 'Série 1',
+              'Rótulo': label,
+              'Cor': sliceColors[i] || '#8884d8'
+            });
+          });
+        } else {
+          // Demais tipos seguem com cor por dataset
+          const colorRow = {
+            'ID_Gráfico': graphId,
+            'Dataset': dataset.name || 'Série 1',
+            'Cor': dataset.color || '#8884d8'
+          };
+          
+          // Para gráficos combo, adicionar colunas específicas
+          if (data.chart_type === 'combo') {
+            colorRow['Tipo'] = dataset.chartType || 'bar';
+            const yAxisId = dataset.yAxisId || 'left';
+            colorRow['Eixo Y'] = yAxisId === 'right' ? 'Direito' : 'Esquerdo';
+            colorRow['Formato'] = dataset.valueFormat || data.options?.valueFormat || 'number';
+          }
+          
+          colorRows.push(colorRow);
+        }
+      });
+
+      const wsColors = XLSX.utils.json_to_sheet(colorRows);
+      wsColors['!cols'] = [
+        { wch: 12 }, // ID_Gráfico
+        { wch: 20 }, // Dataset
+        { wch: 20 }, // Rótulo (opcional para pizza/rosca)
+        { wch: 15 }, // Cor
+        { wch: 12 }, // Tipo (opcional para combo)
+        { wch: 12 }, // Eixo Y (opcional para combo)
+        { wch: 15 }  // Formato (opcional para combo)
+      ];
+      XLSX.utils.book_append_sheet(wb, wsColors, 'Cores');
+
+      // ===== ABA 4: EIXOS (apenas para gráficos combo) =====
+      if (data.chart_type === 'combo' && data.options) {
+        const axisRows = [];
+        const leftAxis = data.options.leftAxis || {};
+        const rightAxis = data.options.rightAxis || {};
+        
+        axisRows.push({
+          'ID_Gráfico': 'G1',
+          'Eixo': 'Esquerdo',
+          'Mínimo': leftAxis.min !== undefined && leftAxis.min !== null ? leftAxis.min : '',
+          'Máximo': leftAxis.max !== undefined && leftAxis.max !== null ? leftAxis.max : ''
+        });
+        
+        axisRows.push({
+          'ID_Gráfico': 'G1',
+          'Eixo': 'Direito',
+          'Mínimo': rightAxis.min !== undefined && rightAxis.min !== null ? rightAxis.min : '',
+          'Máximo': rightAxis.max !== undefined && rightAxis.max !== null ? rightAxis.max : ''
+        });
+
+        const wsAxis = XLSX.utils.json_to_sheet(axisRows);
+        
+        // Formatar células numéricas da aba Eixos com padrão brasileiro
+        const axisRange = XLSX.utils.decode_range(wsAxis['!ref']);
+        for (let R = axisRange.s.r + 1; R <= axisRange.e.r; ++R) {
+          for (let C = 2; C <= 3; ++C) { // Colunas Mínimo e Máximo
+            const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+            const cell = wsAxis[cellAddress];
+            if (cell && typeof cell.v === 'number') {
+              cell.z = '0.00';
+              cell.w = new Intl.NumberFormat('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+              }).format(cell.v);
+            }
+          }
+        }
+        
+        wsAxis['!cols'] = [
+          { wch: 12 }, // ID_Gráfico
+          { wch: 12 }, // Eixo
+          { wch: 12 }, // Mínimo
+          { wch: 12 }  // Máximo
+        ];
+        XLSX.utils.book_append_sheet(wb, wsAxis, 'Eixos');
+      }
+
+      // Download do arquivo
       const fileName = `indicador_${data.title.replace(/[^a-zA-Z0-9]/g, '_') || 'sem_titulo'}_${new Date().toISOString().split('T')[0]}.xlsx`;
       XLSX.writeFile(wb, fileName);
+      
+      console.log('✅ Indicador exportado no formato de 3 abas');
     } catch (error) {
       console.error('Erro ao exportar indicador:', error);
       alert('Erro ao exportar este indicador.');
@@ -2121,14 +2273,6 @@ export function ProjectDetails() {
     const profile = member.profiles || member.profile;
     const id = member.user_id || member.id || profile?.id;
     if (!id) return null;
-    
-    // Debug: verificar dados do membro
-    console.log('🔍 Normalizando membro:', {
-      member,
-      profile,
-      hasEmail: !!profile?.email,
-      email: profile?.email
-    });
     
     return {
       ...member,

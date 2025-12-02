@@ -73,14 +73,12 @@ export default function TabsConfigDialog({ open, onOpenChange, currentConfig, cu
   // Sincronizar config quando o modal abrir ou currentConfig mudar
   useEffect(() => {
     if (open) {
-      console.log('📂 Modal aberto, config atual:', currentConfig, 'config cliente:', currentConfigClient);
       setConfig(currentConfig);
       setConfigClient(currentConfigClient);
     }
   }, [open, currentConfig, currentConfigClient]);
 
   const handleToggle = (tabKey) => {
-    console.log('🔄 Toggling tab:', tabKey, 'Current:', config[tabKey], 'New:', !config[tabKey]);
     setConfig(prev => ({
       ...prev,
       [tabKey]: !prev[tabKey]
@@ -96,7 +94,6 @@ export default function TabsConfigDialog({ open, onOpenChange, currentConfig, cu
   };
 
   const handleToggleClient = (tabKey) => {
-    console.log('🔄 Toggling tab para cliente:', tabKey, 'Current:', configClient[tabKey], 'New:', !configClient[tabKey]);
     setConfigClient(prev => ({
       ...prev,
       [tabKey]: !prev[tabKey]
@@ -123,8 +120,6 @@ export default function TabsConfigDialog({ open, onOpenChange, currentConfig, cu
   };
 
   const visibleCount = Object.values(config).filter(Boolean).length;
-
-  console.log('🎨 Renderizando TabsConfigDialog, config:', config, 'visibleCount:', visibleCount);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

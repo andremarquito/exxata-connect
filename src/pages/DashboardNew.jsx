@@ -7,11 +7,15 @@ import { Badge } from '@/components/ui/badge';
 import { 
   Building2, DollarSign, Shield, Brain, Clock, CheckCircle, 
   FileText, User, MessageSquare, ArrowRight, TrendingUp, Users, 
-  Target, Zap, Activity, BarChart3, Plus, X, GripVertical
+  Target, Zap, Activity, BarChart3, Plus, X, GripVertical, Filter,
+  Calendar, MapPin, Info, ArrowUpDown, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useProjects } from '@/contexts/ProjectsContext';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 // Projetos agora vêm do ProjectsContext
 
@@ -41,12 +45,23 @@ const recentActivities = [
 
 export function Dashboard() {
   const { user } = useAuth();
-  const { projects, userCanSeeProject } = useProjects();
+  const { projects, userCanSeeProject, getAllUserActivities } = useProjects();
 
   // Estado para cards personalizáveis
   const [showAddCardModal, setShowAddCardModal] = useState(false);
   const [draggingCardId, setDraggingCardId] = useState(null);
   const [dragOverCardId, setDragOverCardId] = useState(null);
+
+  // Estados para filtros de atividades
+  const [activityProjectFilter, setActivityProjectFilter] = useState('all');
+  const [activityStatusFilter, setActivityStatusFilter] = useState('all');
+  const [activityStartDateFilter, setActivityStartDateFilter] = useState('');
+  const [activityEndDateFilter, setActivityEndDateFilter] = useState('');
+  const [activityResponsibleFilter, setActivityResponsibleFilter] = useState('');
+  
+  // Estados para ordenação
+  const [sortField, setSortField] = useState(null); // 'startDate' ou 'endDate'
+  const [sortOrder, setSortOrder] = useState('desc'); // 'asc' ou 'desc'
 
   // Projetos visíveis para o usuário atual
   const visibleProjects = useMemo(
@@ -291,6 +306,99 @@ export function Dashboard() {
     }
   };
 
+  // Consolidar atividades de todos os projetos
+  const allActivities = useMemo(() => getAllUserActivities(), [projects, user]);
+
+  // Filtrar e ordenar atividades
+  const filteredActivities = useMemo(() => {
+    let filtered = allActivities.filter(activity => {
+      // Filtro por projeto
+      if (activityProjectFilter !== 'all' && String(activity.projectId) !== activityProjectFilter) {
+        return false;
+      }
+      
+      // Filtro por status
+      if (activityStatusFilter !== 'all' && activity.status !== activityStatusFilter) {
+        return false;
+      }
+      
+      // Filtro por data de início
+      if (activityStartDateFilter && activity.startDate) {
+        const activityDate = new Date(activity.startDate);
+        const filterDate = new Date(activityStartDateFilter);
+        if (activityDate < filterDate) return false;
+      }
+      
+      // Filtro por data de fim
+      if (activityEndDateFilter && activity.endDate) {
+        const activityDate = new Date(activity.endDate);
+        const filterDate = new Date(activityEndDateFilter);
+        if (activityDate > filterDate) return false;
+      }
+      
+      // Filtro por responsável (busca por texto)
+      if (activityResponsibleFilter && activity.assignedTo) {
+        const searchTerm = activityResponsibleFilter.toLowerCase();
+        const responsible = activity.assignedTo.toLowerCase();
+        if (!responsible.includes(searchTerm)) return false;
+      }
+      
+      return true;
+    });
+
+    // Ordenação
+    if (sortField) {
+      filtered = [...filtered].sort((a, b) => {
+        const dateA = a[sortField] ? new Date(a[sortField]) : new Date(0);
+        const dateB = b[sortField] ? new Date(b[sortField]) : new Date(0);
+        
+        if (sortOrder === 'asc') {
+          return dateA - dateB;
+        } else {
+          return dateB - dateA;
+        }
+      });
+    }
+
+    return filtered;
+  }, [allActivities, activityProjectFilter, activityStatusFilter, activityStartDateFilter, activityEndDateFilter, activityResponsibleFilter, sortField, sortOrder]);
+
+  // Função para alternar ordenação
+  const handleSort = (field) => {
+    if (sortField === field) {
+      // Se já está ordenando por este campo, inverte a ordem
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Se é um novo campo, ordena decrescente por padrão
+      setSortField(field);
+      setSortOrder('desc');
+    }
+  };
+
+  // Função para formatar data
+  const formatDate = (dateString) => {
+    if (!dateString) return '—';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('pt-BR');
+  };
+
+  // Função para obter cor do status
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'concluída':
+      case 'concluida':
+        return 'bg-green-100 text-green-800';
+      case 'em andamento':
+        return 'bg-blue-100 text-blue-800';
+      case 'a fazer':
+        return 'bg-slate-100 text-slate-800';
+      case 'atrasada':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-slate-100 text-slate-800';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 overflow-x-hidden">
       {/* Hero Section */}
@@ -419,31 +527,186 @@ export function Dashboard() {
           </div>
         )}
 
+        {/* Seção de Atividades Consolidadas */}
+        {allActivities.length > 0 && (
+          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <CardTitle className="text-xl font-bold text-blue-exxata mb-2 flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    Atividades
+                  </CardTitle>
+                  <CardDescription className="text-slate-600">
+                    Todas as atividades dos seus projetos em um só lugar
+                  </CardDescription>
+                </div>
+                <Badge variant="secondary" className="text-sm">
+                  {filteredActivities.length} de {allActivities.length}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Filtros */}
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+                {/* Filtro por Projeto */}
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1.5 block">Projeto</label>
+                  <Select value={activityProjectFilter} onValueChange={setActivityProjectFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos os projetos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os projetos</SelectItem>
+                      {visibleProjects.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Filtro por Status */}
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1.5 block">Status</label>
+                  <Select value={activityStatusFilter} onValueChange={setActivityStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos os status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os status</SelectItem>
+                      <SelectItem value="A Fazer">A Fazer</SelectItem>
+                      <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+                      <SelectItem value="Concluída">Concluída</SelectItem>
+                      <SelectItem value="Atrasada">Atrasada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Filtro por Data de Início */}
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1.5 block">Data Início (a partir de)</label>
+                  <Input
+                    type="date"
+                    value={activityStartDateFilter}
+                    onChange={(e) => setActivityStartDateFilter(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Filtro por Data de Fim */}
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1.5 block">Data Fim (até)</label>
+                  <Input
+                    type="date"
+                    value={activityEndDateFilter}
+                    onChange={(e) => setActivityEndDateFilter(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Filtro por Responsável */}
+                <div>
+                  <label className="text-sm font-medium text-slate-700 mb-1.5 block">Responsável</label>
+                  <Input
+                    type="text"
+                    placeholder="Buscar por nome..."
+                    value={activityResponsibleFilter}
+                    onChange={(e) => setActivityResponsibleFilter(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+
+              {/* Tabela de Atividades */}
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50">
+                      <TableHead className="font-semibold">Atividade</TableHead>
+                      <TableHead className="font-semibold">Projeto</TableHead>
+                      <TableHead className="font-semibold">Responsável</TableHead>
+                      <TableHead className="font-semibold">
+                        <button 
+                          onClick={() => handleSort('startDate')}
+                          className="flex items-center gap-1 hover:text-blue-exxata transition-colors"
+                        >
+                          Início
+                          {sortField === 'startDate' ? (
+                            sortOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                          ) : (
+                            <ArrowUpDown className="h-4 w-4 opacity-50" />
+                          )}
+                        </button>
+                      </TableHead>
+                      <TableHead className="font-semibold">
+                        <button 
+                          onClick={() => handleSort('endDate')}
+                          className="flex items-center gap-1 hover:text-blue-exxata transition-colors"
+                        >
+                          Fim
+                          {sortField === 'endDate' ? (
+                            sortOrder === 'asc' ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+                          ) : (
+                            <ArrowUpDown className="h-4 w-4 opacity-50" />
+                          )}
+                        </button>
+                      </TableHead>
+                      <TableHead className="font-semibold">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredActivities.length > 0 ? (
+                      filteredActivities.map((activity) => (
+                        <TableRow key={activity.id} className="hover:bg-slate-50">
+                          <TableCell className="font-medium">{activity.title}</TableCell>
+                          <TableCell>
+                            <Link 
+                              to={`/projects/${activity.projectId}`}
+                              className="text-blue-exxata hover:underline flex items-center gap-1"
+                            >
+                              {activity.projectName}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-slate-600">{activity.assignedTo || '—'}</TableCell>
+                          <TableCell className="text-slate-600">{formatDate(activity.startDate)}</TableCell>
+                          <TableCell className="text-slate-600">{formatDate(activity.endDate)}</TableCell>
+                          <TableCell>
+                            <Badge className={getStatusColor(activity.status)}>
+                              {activity.status || 'Sem status'}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                          Nenhuma atividade encontrada com os filtros selecionados
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Seção Principal - Projetos */}
-        <div className="grid gap-8 lg:grid-cols-3">
+        <div className="space-y-6">
           {/* Projetos de Consultoria */}
-          <Card className="lg:col-span-2 bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
+          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
             <CardHeader>
               <div className="flex items-center justify-between gap-4 flex-wrap">
                 <div>
                   <CardTitle className="text-xl font-bold text-blue-exxata mb-2">Projetos de Consultoria</CardTitle>
                   <CardDescription className="text-slate-600">
-                    Destaque o progresso do projeto com a metodologia Exxata de Inteligência Humana
+                    Visualize todos os seus projetos com informações detalhadas
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-3">
-                  {visibleProjects.length > 0 && (
-                    <Select value={String(featured?.id ?? '')} onValueChange={handleFeaturedChange}>
-                      <SelectTrigger className="w-[260px]">
-                        <SelectValue placeholder="Selecionar projeto em destaque" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {visibleProjects.map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Badge variant="secondary" className="text-sm">
+                    {visibleProjects.length} projeto(s)
+                  </Badge>
                   {canCreateProject && (
                     <Button 
                       onClick={openNewProject} 
@@ -457,63 +720,99 @@ export function Dashboard() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6 pb-6">
-              {/* Projeto Principal Dinâmico */}
-              <div className="bg-gradient-to-r from-blue-50 to-slate-50 p-6 rounded-xl border border-slate-200">
-                {featured ? (
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-blue-exxata mb-1">
-                        {featured.name}
-                      </h3>
-                      <p className="text-sm text-slate-600 mb-3">{featured.client || '—'}</p>
-                      <div className="flex items-center space-x-4 text-sm text-slate-500">
-                        <span className="flex items-center">
-                          <Building2 className="h-4 w-4 mr-1" />
-                          {featured.location || '—'}
-                        </span>
-                        <span className="flex items-center">
-                          <DollarSign className="h-4 w-4 mr-1" />
-                          {featured.contractValue || '—'}
-                        </span>
-                        {Array.isArray(featured.exxataActivities) && featured.exxataActivities.length > 0 ? (
-                          <Badge className="bg-blue-100 text-blue-800 border-0">
-                            {featured.exxataActivities[0]}
-                            {featured.exxataActivities.length > 1 ? ` +${featured.exxataActivities.length - 1}` : ''}
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-slate-100 text-slate-600 border-0">Sem serviço definido</Badge>
-                        )}
+            <CardContent className="pb-6">
+              {/* Container com scroll para todos os projetos */}
+              {visibleProjects.length > 0 ? (
+                <div className="max-h-[800px] overflow-y-auto pr-2 space-y-4 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+                  {visibleProjects.map((project) => (
+                    <div key={project.id} className="bg-gradient-to-r from-blue-50 to-slate-50 p-6 rounded-xl border border-slate-200 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-blue-exxata mb-1">
+                            {project.name}
+                          </h3>
+                          <p className="text-sm text-slate-600 mb-3">{project.client || '—'}</p>
+                          <div className="flex items-center flex-wrap gap-3 text-sm text-slate-500">
+                            <span className="flex items-center">
+                              <MapPin className="h-4 w-4 mr-1" />
+                              {project.location || '—'}
+                            </span>
+                            <span className="flex items-center">
+                              <DollarSign className="h-4 w-4 mr-1" />
+                              {project.contractValue || '—'}
+                            </span>
+                            {project.hourlyRate && Number(project.hourlyRate) > 0 && (
+                              <span className="flex items-center font-medium text-purple-600">
+                                <Clock className="h-4 w-4 mr-1" />
+                                US$ {Number(project.hourlyRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h
+                              </span>
+                            )}
+                            {Array.isArray(project.exxataActivities) && project.exxataActivities.length > 0 ? (
+                              <Badge className="bg-blue-100 text-blue-800 border-0">
+                                {project.exxataActivities[0]}
+                                {project.exxataActivities.length > 1 ? ` +${project.exxataActivities.length - 1}` : ''}
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-slate-100 text-slate-600 border-0">Sem serviço definido</Badge>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right space-y-3">
+                          {/* Avanço de Prazo */}
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500 mb-1">Avanço de Prazo</div>
+                              <div className="text-xl font-bold text-blue-exxata">{project.progress ?? 0}%</div>
+                            </div>
+                            <Clock className="h-5 w-5 text-slate-400" />
+                          </div>
+                          
+                          {/* Avanço de Faturamento */}
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500 mb-1">Avanço de Faturamento</div>
+                              <div className="text-xl font-bold text-green-600">{project.billingProgress ?? 0}%</div>
+                            </div>
+                            <DollarSign className="h-5 w-5 text-green-500" />
+                          </div>
+                          
+                          {/* Análise Preditiva com Popup */}
+                          {project.aiPredictiveText && (
+                            <div className="flex items-center justify-end gap-2">
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button className="p-2 hover:bg-blue-100 rounded-lg transition-colors" title="Ver análise preditiva">
+                                    <Info className="h-5 w-5 text-blue-600 cursor-pointer" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80">
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <Brain className="h-5 w-5 text-blue-600" />
+                                      <h4 className="font-semibold text-blue-800">Análise Preditiva</h4>
+                                    </div>
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap">
+                                      {project.aiPredictiveText}
+                                    </p>
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          )}
+                          
+                          <div className="mt-3 pt-3 border-t border-slate-200">
+                            <Link to={`/projects/${project.id}`} className="text-sm text-blue-exxata hover:underline inline-flex items-center">
+                              Abrir Projeto
+                              <ArrowRight className="h-3 w-3 ml-1" />
+                            </Link>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right space-y-3">
-                      {/* Avanço de Prazo */}
-                      <div className="flex items-center justify-end gap-2">
-                        <div className="text-right">
-                          <div className="text-xs text-slate-500 mb-1">Avanço de Prazo</div>
-                          <div className="text-xl font-bold text-blue-exxata">{featured.progress ?? 0}%</div>
-                        </div>
-                        <Clock className="h-5 w-5 text-slate-400" />
-                      </div>
-                      
-                      {/* Avanço de Faturamento */}
-                      <div className="flex items-center justify-end gap-2">
-                        <div className="text-right">
-                          <div className="text-xs text-slate-500 mb-1">Avanço de Faturamento</div>
-                          <div className="text-xl font-bold text-green-600">{featured.billingProgress ?? 0}%</div>
-                        </div>
-                        <DollarSign className="h-5 w-5 text-green-500" />
-                      </div>
-                      
-                      <div className="mt-3 pt-3 border-t border-slate-200">
-                        <Link to={`/projects/${featured.id}`} className="text-sm text-blue-exxata hover:underline inline-flex items-center">
-                          Abrir Projeto
-                          <span className="sr-only">Abrir</span>
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-gradient-to-r from-blue-50 to-slate-50 p-6 rounded-xl border border-slate-200">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold text-blue-exxata mb-1">Nenhum projeto disponível</h3>
@@ -534,43 +833,6 @@ export function Dashboard() {
                       </Button>
                     )}
                   </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Resumo Executivo */}
-          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg rounded-2xl">
-            <CardHeader>
-              <CardTitle className="text-lg font-bold text-blue-exxata flex items-center">
-                <BarChart3 className="h-5 w-5 mr-2" />
-                Resumo Executivo
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {visibleProjects.length > 0 && featured ? (
-                /* Análise Preditiva do Projeto */
-                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
-                  <div className="flex items-center mb-2">
-                    <Brain className="h-5 w-5 text-blue-600 mr-2" />
-                    <span className="font-medium text-blue-800">Análise Preditiva</span>
-                  </div>
-                  <p className="text-sm text-blue-700 whitespace-pre-wrap">
-                    {featured?.aiPredictiveText || 'Com base na experiência Exxata, o projeto tem 85% de probabilidade de ser concluído dentro do prazo, com redução de 40% no risco de pleitos contratuais em obras de infraestrutura.'}
-                  </p>
-                </div>
-              ) : (
-                /* Mensagem quando não há projetos */
-                <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 text-center">
-                  <div className="flex items-center justify-center mb-3">
-                    <Brain className="h-8 w-8 text-slate-400" />
-                  </div>
-                  <p className="text-sm text-slate-600 font-medium mb-2">
-                    Inteligência Humana Exxata
-                  </p>
-                  <p className="text-sm text-slate-500">
-                    Inclua um projeto para ver as condutas sugeridas pela Exxata.
-                  </p>
                 </div>
               )}
             </CardContent>

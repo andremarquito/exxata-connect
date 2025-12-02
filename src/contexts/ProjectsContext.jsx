@@ -358,7 +358,7 @@ const loadProjectsFromSupabase = async (userId, userRole) => {
         status: act.status,
         startDate: act.start_date,
         endDate: act.end_date,
-        isMilestone: act.is_milestone || false,
+        isMilestone: act.is_milestone ?? false,
         description: '',
         createdBy: project.created_by,
         createdAt: act.created_at,
@@ -824,7 +824,7 @@ export function ProjectsProvider({ children }) {
             startDate: newActivity.start_date,
             endDate: newActivity.end_date,
             status: newActivity.status,
-            isMilestone: newActivity.is_milestone || false,
+            isMilestone: newActivity.is_milestone ?? false,
             createdAt: newActivity.created_at
           }]
         };
@@ -864,11 +864,10 @@ export function ProjectsProvider({ children }) {
 
   const updateProjectActivity = async (projectId, activityId, patch) => {
     return await withAuthRetry(async () => {
-      console.log('📅 Atualizando atividade:', { projectId, activityId, patch });
+      console.log('📅 [UPDATE] Atualizando atividade:', { projectId, activityId, patch });
 
       const updatedActivity = await activityService.updateActivity(activityId, patch);
 
-      console.log('✅ Atividade atualizada:', updatedActivity);
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
@@ -886,7 +885,7 @@ export function ProjectsProvider({ children }) {
                   startDate: updatedActivity.start_date,
                   endDate: updatedActivity.end_date,
                   status: updatedActivity.status,
-                  isMilestone: updatedActivity.is_milestone || false
+                  isMilestone: updatedActivity.is_milestone ?? false
                 }
               : a
           )
@@ -933,11 +932,7 @@ export function ProjectsProvider({ children }) {
 
   const getProjectActivities = async (projectId) => {
     try {
-      console.log('📅 Buscando atividades do projeto:', projectId);
-      
       const activities = await activityService.getProjectActivities(projectId);
-
-      console.log('✅ Atividades encontradas:', activities?.length || 0);
       
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
@@ -952,6 +947,7 @@ export function ProjectsProvider({ children }) {
             startDate: a.start_date,
             endDate: a.end_date,
             status: a.status,
+            isMilestone: a.is_milestone ?? false,
             createdAt: a.created_at
           }))
         };
@@ -1020,11 +1016,7 @@ export function ProjectsProvider({ children }) {
 
   const getProjectFiles = async (projectId) => {
     try {
-      console.log('📁 Buscando arquivos do projeto:', projectId);
-
       const files = await fileService.getProjectFiles(projectId);
-
-      console.log('✅ Arquivos encontrados:', files?.length || 0);
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
@@ -1148,11 +1140,7 @@ export function ProjectsProvider({ children }) {
 
   const getProjectIndicators = async (projectId) => {
     try {
-      console.log('📊 Buscando indicadores do projeto:', projectId);
-
       const indicators = await indicatorService.getProjectIndicators(projectId);
-
-      console.log('✅ Indicadores encontrados:', indicators?.length || 0);
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
@@ -1197,11 +1185,7 @@ export function ProjectsProvider({ children }) {
 
   const getProjectPanorama = async (projectId) => {
     try {
-      console.log('📊 Buscando panorama do projeto:', projectId);
-
       const panorama = await panoramaService.getProjectPanorama(projectId);
-
-      console.log('✅ Panorama encontrado:', panorama);
 
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
@@ -1464,8 +1448,6 @@ export function ProjectsProvider({ children }) {
 
   const getProjectMembers = async (projectId) => {
     try {
-      console.log('🔍 INICIANDO getProjectMembers para projeto:', projectId);
-      
       // Buscar membros diretamente da tabela com JOIN para profiles
       // Especificar explicitamente qual relação usar para evitar ambiguidade
       const { data, error } = await supabase
@@ -1489,19 +1471,9 @@ export function ProjectsProvider({ children }) {
 
       if (error) {
         console.error('❌ ERRO AO BUSCAR MEMBROS:', error);
-        console.error('❌ DETALHES DO ERRO:', JSON.stringify(error, null, 2));
         return [];
       }
 
-      console.log('✅ MEMBROS ENCONTRADOS:', data?.length || 0);
-      console.log('📋 DADOS DOS MEMBROS:', data?.map(m => ({
-        user_id: m.user_id,
-        role: m.role,
-        profile_name: m.profiles?.name,
-        profile_email: m.profiles?.email,
-        has_profiles: !!m.profiles
-      })));
-      console.log('📦 DADOS COMPLETOS:', data);
       return data || [];
     } catch (error) {
       console.error('❌ Erro ao buscar membros:', error);
@@ -1511,15 +1483,11 @@ export function ProjectsProvider({ children }) {
 
   const loadProjectMembers = async (projectId) => {
     try {
-      console.log('🚀 INICIANDO loadProjectMembers para projeto:', projectId);
-      
       const members = await getProjectMembers(projectId);
       
-      console.log('✅ MEMBROS CARREGADOS:', members?.length || 0);
-      console.log('📦 MEMBROS COMPLETOS:', members);
       return members;
     } catch (error) {
-      console.error('❌ ERRO ao carregar membros:', error);
+      console.error('❌ Erro ao carregar membros:', error);
       return [];
     }
   };
@@ -1662,11 +1630,7 @@ export function ProjectsProvider({ children }) {
 
   const getProjectConducts = async (projectId) => {
     try {
-      console.log('📋 Buscando condutas do projeto:', projectId);
-      
       const conducts = await conductService.getProjectConducts(projectId);
-
-      console.log('✅ Condutas encontradas:', conducts?.length || 0);
       
       // Atualizar estado local
       setProjects(prev => prev.map(p => {
@@ -1689,6 +1653,36 @@ export function ProjectsProvider({ children }) {
       console.error('❌ Erro ao buscar condutas:', error);
       return [];
     }
+  };
+
+  // 🆕 Função para consolidar todas as atividades dos projetos do usuário
+  const getAllUserActivities = () => {
+    if (!user) return [];
+    
+    // Filtrar projetos que o usuário pode ver
+    const userProjects = projects.filter(p => userCanSeeProject(p));
+    
+    // Consolidar todas as atividades
+    const allActivities = [];
+    userProjects.forEach(project => {
+      if (Array.isArray(project.activities)) {
+        project.activities.forEach(activity => {
+          allActivities.push({
+            ...activity,
+            projectId: project.id,
+            projectName: project.name,
+            projectClient: project.client
+          });
+        });
+      }
+    });
+    
+    // Ordenar por data de início (mais recentes primeiro)
+    return allActivities.sort((a, b) => {
+      const dateA = a.startDate ? new Date(a.startDate) : new Date(0);
+      const dateB = b.startDate ? new Date(b.startDate) : new Date(0);
+      return dateB - dateA;
+    });
   };
 
   const value = useMemo(() => ({
@@ -1732,6 +1726,8 @@ export function ProjectsProvider({ children }) {
     addPanoramaItem,
     updatePanoramaItem,
     deletePanoramaItem,
+    // 🆕 Função para consolidar atividades
+    getAllUserActivities,
   }), [projects, isLoading, user]);
 
   return (
