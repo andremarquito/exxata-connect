@@ -149,6 +149,12 @@ export function Team() {
       toast.error('Selecione uma função e pelo menos um membro.');
       return;
     }
+
+    // Gerentes não podem definir usuários como Admin
+    if (isManager && bulkRole === 'admin') {
+      toast.error('Gerentes não podem definir usuários como Admin.');
+      return;
+    }
     setShowBulkModal(true);
   };
 
@@ -435,11 +441,17 @@ export function Team() {
                         <SelectValue placeholder="Selecionar função..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {roles.map((r) => (
-                          <SelectItem key={r.value} value={r.value}>
-                            {r.label}
-                          </SelectItem>
-                        ))}
+                        {roles
+                          .filter(r => {
+                            // Gerentes não podem selecionar Admin
+                            if (isManager && r.value === 'admin') return false;
+                            return true;
+                          })
+                          .map((r) => (
+                            <SelectItem key={r.value} value={r.value}>
+                              {r.label}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                     <Button
@@ -665,11 +677,17 @@ export function Team() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {roles.map((r) => (
-                      <SelectItem key={r.value} value={r.value}>
-                        {r.label}
-                      </SelectItem>
-                    ))}
+                    {roles
+                      .filter(r => {
+                        // Gerentes não podem selecionar Admin
+                        if (isManager && r.value === 'admin') return false;
+                        return true;
+                      })
+                      .map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -698,6 +716,13 @@ export function Team() {
               </Button>
               <Button onClick={async () => {
                 if (!editingMember) return;
+                
+                // Gerentes não podem definir usuários como Admin
+                if (isManager && editingMember.role === 'admin') {
+                  toast.error('Gerentes não podem definir usuários como Admin.');
+                  return;
+                }
+                
                 try {
                   await updateUser(editingMember.id, { role: editingMember.role, status: editingMember.status });
                   toast.success('Membro atualizado com sucesso.');

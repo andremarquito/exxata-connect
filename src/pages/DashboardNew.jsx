@@ -54,7 +54,7 @@ export function Dashboard() {
 
   // Estados para filtros de atividades
   const [activityProjectFilter, setActivityProjectFilter] = useState('all');
-  const [activityStatusFilter, setActivityStatusFilter] = useState('all');
+  const [activityStatusFilter, setActivityStatusFilter] = useState('Em Andamento');
   const [activityStartDateFilter, setActivityStartDateFilter] = useState('');
   const [activityEndDateFilter, setActivityEndDateFilter] = useState('');
   const [activityResponsibleFilter, setActivityResponsibleFilter] = useState('');
@@ -577,7 +577,6 @@ export function Dashboard() {
                       <SelectItem value="A Fazer">A Fazer</SelectItem>
                       <SelectItem value="Em Andamento">Em Andamento</SelectItem>
                       <SelectItem value="Concluída">Concluída</SelectItem>
-                      <SelectItem value="Atrasada">Atrasada</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -723,73 +722,57 @@ export function Dashboard() {
             <CardContent className="pb-6">
               {/* Container com scroll para todos os projetos */}
               {visibleProjects.length > 0 ? (
-                <div className="max-h-[800px] overflow-y-auto pr-2 space-y-4 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
+                <div className="max-h-[800px] overflow-y-auto pr-2 space-y-4">
                   {visibleProjects.map((project) => (
-                    <div key={project.id} className="bg-gradient-to-r from-blue-50 to-slate-50 p-6 rounded-xl border border-slate-200 hover:shadow-md transition-shadow">
+                    <div key={project.id} className="bg-white p-6 rounded-xl border border-slate-200 hover:shadow-lg transition-all duration-200">
+                      {/* Header: Título, Cliente e Métricas Principais */}
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex-1">
-                          <h3 className="font-semibold text-blue-exxata mb-1">
+                          <h3 className="text-lg font-bold text-slate-900 mb-1">
                             {project.name}
                           </h3>
-                          <p className="text-sm text-slate-600 mb-3">{project.client || '—'}</p>
-                          <div className="flex items-center flex-wrap gap-3 text-sm text-slate-500">
-                            <span className="flex items-center">
-                              <MapPin className="h-4 w-4 mr-1" />
-                              {project.location || '—'}
-                            </span>
-                            <span className="flex items-center">
-                              <DollarSign className="h-4 w-4 mr-1" />
-                              {project.contractValue || '—'}
-                            </span>
-                            {project.hourlyRate && Number(project.hourlyRate) > 0 && (
-                              <span className="flex items-center font-medium text-purple-600">
-                                <Clock className="h-4 w-4 mr-1" />
-                                US$ {Number(project.hourlyRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h
-                              </span>
-                            )}
-                            {Array.isArray(project.exxataActivities) && project.exxataActivities.length > 0 ? (
-                              <Badge className="bg-blue-100 text-blue-800 border-0">
-                                {project.exxataActivities[0]}
-                                {project.exxataActivities.length > 1 ? ` +${project.exxataActivities.length - 1}` : ''}
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-slate-100 text-slate-600 border-0">Sem serviço definido</Badge>
-                            )}
-                          </div>
+                          <p className="text-sm text-slate-500">{project.client || 'Cliente não informado'}</p>
                         </div>
-                        <div className="text-right space-y-3">
+                        
+                        {/* Métricas no topo à direita */}
+                        <div className="flex items-center gap-6 ml-6">
+                          {/* Valor Homem Hora */}
+                          {project.hourlyRate && Number(project.hourlyRate) > 0 && (
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500 mb-1">Fat. Homem Hora</div>
+                              <div className="text-xl font-bold text-slate-900">
+                                US$ {Number(project.hourlyRate).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/h
+                              </div>
+                            </div>
+                          )}
+                          
                           {/* Avanço de Prazo */}
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="text-right">
-                              <div className="text-xs text-slate-500 mb-1">Avanço de Prazo</div>
-                              <div className="text-xl font-bold text-blue-exxata">{project.progress ?? 0}%</div>
-                            </div>
-                            <Clock className="h-5 w-5 text-slate-400" />
+                          <div className="text-right">
+                            <div className="text-xs text-slate-500 mb-1">Avanço de Prazo</div>
+                            <div className="text-xl font-bold text-slate-900">{project.progress ?? 0}%</div>
                           </div>
                           
-                          {/* Avanço de Faturamento */}
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="text-right">
-                              <div className="text-xs text-slate-500 mb-1">Avanço de Faturamento</div>
-                              <div className="text-xl font-bold text-green-600">{project.billingProgress ?? 0}%</div>
-                            </div>
-                            <DollarSign className="h-5 w-5 text-green-500" />
+                          {/* Avanço de Faturamento Real */}
+                          <div className="text-right">
+                            <div className="text-xs text-slate-500 mb-1">Avanço de Faturamento Real</div>
+                            <div className="text-xl font-bold text-slate-900">{project.billingProgress ?? 0}%</div>
                           </div>
                           
-                          {/* Análise Preditiva com Popup */}
+                          {/* Análise Preditiva (Inteligência Humana) */}
                           {project.aiPredictiveText && (
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="text-right">
                               <Popover>
                                 <PopoverTrigger asChild>
-                                  <button className="p-2 hover:bg-blue-100 rounded-lg transition-colors" title="Ver análise preditiva">
-                                    <Info className="h-5 w-5 text-blue-600 cursor-pointer" />
+                                  <button className="flex items-center gap-2 text-xs text-slate-500 hover:text-blue-600 transition-colors" title="Ver análise preditiva">
+                                    <span>Inteligência Humana</span>
+                                    <Info className="h-4 w-4" />
                                   </button>
                                 </PopoverTrigger>
                                 <PopoverContent className="w-80">
                                   <div className="space-y-2">
                                     <div className="flex items-center gap-2">
                                       <Brain className="h-5 w-5 text-blue-600" />
-                                      <h4 className="font-semibold text-blue-800">Análise Preditiva</h4>
+                                      <h4 className="font-semibold text-blue-800">Inteligência Humana</h4>
                                     </div>
                                     <p className="text-sm text-slate-700 whitespace-pre-wrap">
                                       {project.aiPredictiveText}
@@ -799,14 +782,67 @@ export function Dashboard() {
                               </Popover>
                             </div>
                           )}
-                          
-                          <div className="mt-3 pt-3 border-t border-slate-200">
-                            <Link to={`/projects/${project.id}`} className="text-sm text-blue-exxata hover:underline inline-flex items-center">
-                              Abrir Projeto
-                              <ArrowRight className="h-3 w-3 ml-1" />
-                            </Link>
-                          </div>
                         </div>
+                      </div>
+                      
+                      {/* Informações Secundárias e Badges */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center flex-wrap gap-4 text-sm text-slate-600">
+                          {/* Localização */}
+                          <span className="flex items-center gap-1.5">
+                            <MapPin className="h-4 w-4 text-slate-400" />
+                            {project.location || 'Não informado'}
+                          </span>
+                          
+                          {/* Valor do Contrato */}
+                          <span className="flex items-center gap-1.5">
+                            <DollarSign className="h-4 w-4 text-slate-400" />
+                            {project.contractValue ? (
+                              typeof project.contractValue === 'number' 
+                                ? project.contractValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                                : project.contractValue
+                            ) : 'Não informado'}
+                          </span>
+                          
+                          {/* Badges de Serviços */}
+                          {Array.isArray(project.exxataActivities) && project.exxataActivities.length > 0 ? (
+                            <>
+                              <Badge className="bg-blue-100 text-blue-800 border-0 font-medium">
+                                {project.exxataActivities[0]}
+                              </Badge>
+                              {project.exxataActivities.length > 1 && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Badge className="bg-slate-100 text-slate-700 border-0 cursor-pointer hover:bg-slate-200 transition-colors">
+                                      +{project.exxataActivities.length - 1}
+                                    </Badge>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-64">
+                                    <div className="space-y-2">
+                                      <p className="font-semibold text-sm text-slate-900">Outros serviços:</p>
+                                      <div className="space-y-1">
+                                        {project.exxataActivities.slice(1).map((service, idx) => (
+                                          <p key={idx} className="text-sm text-slate-700">• {service}</p>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
+                            </>
+                          ) : (
+                            <Badge className="bg-slate-100 text-slate-600 border-0">Backoffice</Badge>
+                          )}
+                        </div>
+                        
+                        {/* Botão Abrir Projeto */}
+                        <Link 
+                          to={`/projects/${project.id}`} 
+                          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                        >
+                          Abrir Projeto
+                          <ArrowRight className="h-4 w-4" />
+                        </Link>
                       </div>
                     </div>
                   ))}

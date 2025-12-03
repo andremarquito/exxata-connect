@@ -3,14 +3,30 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   LayoutDashboard, FolderKanban, Users, Settings, MessageSquareWarning, 
-  ChevronLeft, ChevronRight, MoreHorizontal, LogOut 
+  ChevronLeft, ChevronRight, MoreHorizontal, LogOut, Search, Zap, ChevronDown, ExternalLink 
 } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', permission: null },
   { to: '/projects', icon: FolderKanban, label: 'Projetos', permission: 'view_projects' },
+  { to: '/search', icon: Search, label: 'Pesquisar', permission: null },
   { to: '/team', icon: Users, label: 'Equipe', permission: 'manage_team' },
   { to: '/settings', icon: Settings, label: 'Configurações', permission: null },
+];
+
+const powerApps = [
+  { 
+    name: 'Extrator de RDO com IA', 
+    url: 'https://exxata-extrator-de-rdo-com-ia-690581227740.us-west1.run.app' 
+  },
+  { 
+    name: 'Cronograma Primavera PDF para Excel', 
+    url: 'https://extrator-cronograma-primavera-ia-690581227740.us-west1.run.app' 
+  },
+  { 
+    name: 'Simulador de Monte Carlo', 
+    url: 'https://exxata-montecarlo.streamlit.app' 
+  },
 ];
 
 const helpItems = [
@@ -21,7 +37,12 @@ export function Sidebar() {
   const { user, hasPermission, logout } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isPowerAppsOpen, setIsPowerAppsOpen] = useState(false);
   const navigate = useNavigate();
+
+  // Verificar se o usuário pode ver Power Apps (não é Cliente)
+  const userRole = (user?.role || '').toLowerCase();
+  const canSeePowerApps = userRole !== 'cliente' && userRole !== 'client';
 
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed);
@@ -53,7 +74,7 @@ export function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex-1 px-2 py-4 space-y-1">
+      <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => 
           (item.permission === null || hasPermission(item.permission)) && (
             <NavLink
@@ -73,6 +94,50 @@ export function Sidebar() {
               {!isCollapsed && <span>{item.label}</span>}
             </NavLink>
           )
+        )}
+
+        {/* Exxata Power Apps - Menu Sanfona */}
+        {canSeePowerApps && (
+          <div className="mx-2">
+            <button
+              onClick={() => setIsPowerAppsOpen(!isPowerAppsOpen)}
+              className={`flex items-center justify-between w-full p-3 text-sm font-medium rounded-xl transition-all duration-200 ${
+                isCollapsed 
+                  ? 'justify-center' 
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-blue-exxata'
+              }`}
+            >
+              <div className="flex items-center">
+                <Zap className={`h-5 w-5 ${!isCollapsed ? 'mr-3' : ''}`} />
+                {!isCollapsed && <span>Exxata Power Apps</span>}
+              </div>
+              {!isCollapsed && (
+                <ChevronDown 
+                  className={`h-4 w-4 transition-transform duration-200 ${
+                    isPowerAppsOpen ? 'rotate-180' : ''
+                  }`} 
+                />
+              )}
+            </button>
+            
+            {/* Submenu de Power Apps */}
+            {isPowerAppsOpen && !isCollapsed && (
+              <div className="mt-1 ml-4 space-y-1">
+                {powerApps.map((app) => (
+                  <a
+                    key={app.name}
+                    href={app.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-2 text-xs text-slate-600 hover:bg-slate-100 hover:text-blue-exxata rounded-lg transition-colors group"
+                  >
+                    <span className="truncate">{app.name}</span>
+                    <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-1" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </nav>
 
